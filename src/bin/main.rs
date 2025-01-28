@@ -4,5 +4,5 @@ mod services;
 mod gui;
 
 fn main() {
-    println!("Hello, world!");
+    algorithms::q_learning::double_deep_q_learning::run();
 }
