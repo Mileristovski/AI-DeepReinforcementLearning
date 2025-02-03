@@ -130,9 +130,11 @@ impl Env for LineEnv {
         }
 
         if self.current_state == 0 {
-            self.current_score = -1.0
+            self.current_score -= -1.0
         } else if self.current_state == self.s.len() - 1 {
-            self.current_score = 1.0
+            self.current_score += 1.0
+        } else {
+            self.current_score -= 0.1
         }
     }
 
