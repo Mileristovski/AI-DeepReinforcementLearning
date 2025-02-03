@@ -1,6 +1,6 @@
 mod algorithms;
 mod environments;
-mod services;
+pub mod services;
 mod gui;
 
 fn main() {
