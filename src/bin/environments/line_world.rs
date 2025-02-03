@@ -72,10 +72,6 @@ impl Env for LineEnv {
         todo!()
     }
 
-    fn p(&self, _s: i32, _a: i32, _s_p: i32, _r_index: i32) -> f32 {
-        panic!("Not yet implemented")
-    }
-
     fn state_id(&self) -> usize  {
         self.current_state
     }
