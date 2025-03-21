@@ -114,10 +114,6 @@ impl Env for GridEnv {
         self.current_score
     }
 
-    fn get_action_spaces(&self) -> Vec<usize> {
-        todo!()
-    }
-
     fn state_id(&self) -> usize {
         self.current_state
     }
@@ -198,9 +194,9 @@ impl Env for GridEnv {
         };
 
         self.current_state = self.rc_to_index(row, col);
-        if self.current_state % self.cols == self.cols - 1 {
+        if col == self.cols - 1 {
             self.current_score += 1.0;
-        } else if (self.current_state % self.cols == 0) {
+        } else if col == 0 {
             self.current_score -= 1.0;
         } else {
             self.current_score -= 0.1;
@@ -210,10 +206,15 @@ impl Env for GridEnv {
     fn score(&self) -> f32 { self.current_score }
 
     fn from_random_state(&mut self) {
+        // Reset the game
         self.reset();
+
+        // Make the player start from a random non-terminal location
         let mut rng = rand::thread_rng();
         let random_row = rng.gen_range(0..self.rows);
         let random_col = rng.gen_range(1..(self.cols-1));
+
+        // Set the current state
         self.current_state = self.rc_to_index(random_row, random_col)
     }
 

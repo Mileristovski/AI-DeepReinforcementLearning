@@ -7,7 +7,6 @@ pub trait Env {
     fn get_reward_vector(&self) -> Vec<f32>;
     fn get_terminal_states(&self) -> Vec<usize>;
     fn get_reward(&self, num: usize) -> f32;
-    fn get_action_spaces(&self) -> Vec<usize>;
     fn state_id(&self) -> usize;
     fn reset(&mut self);
     fn display(&self);

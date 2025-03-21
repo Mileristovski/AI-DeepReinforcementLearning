@@ -1,4 +1,5 @@
 use nalgebra::DVector;
+use rand::Rng;
 use crate::environments::env::Env;
 
 pub struct LineEnv {
@@ -13,10 +14,10 @@ pub struct LineEnv {
 
 impl LineEnv {
     pub fn new() -> Self {
-        let s = DVector::from_vec(vec![0, 1, 2, 3, 4]);
+        let s = DVector::from_vec((0..=5).collect());
         let a = DVector::from_vec(vec![0, 1]);
         let r = DVector::from_vec(vec![-1, 0, 1]);
-        let t = vec![0, 4];
+        let t = vec![0, s.len()-1];
         let mut p = vec![vec![vec![vec![0.0f32; r.len()]; s.len()]; a.len()]; s.len()];
 
         for &s_p in &s {
@@ -68,10 +69,6 @@ impl Env for LineEnv {
         self.current_score
     }
 
-    fn get_action_spaces(&self) -> Vec<usize> {
-        todo!()
-    }
-
     fn state_id(&self) -> usize  {
         self.current_state
     }
@@ -93,7 +90,7 @@ impl Env for LineEnv {
     }
 
     fn is_forbidden(&self, _action: i32) -> bool {
-        panic!("Not yet implemented")
+        !self.available_actions().iter().any(|&x| x == _action)
     }
 
     fn is_game_over(&self) -> bool {
@@ -109,7 +106,7 @@ impl Env for LineEnv {
     }
 
     fn step(&mut self, action: i32) -> () {
-        if !self.available_actions().iter().any(|&x| x == action) {
+        if self.is_forbidden(action) {
             panic!("Invalid action");
         }
 
@@ -126,7 +123,7 @@ impl Env for LineEnv {
         }
 
         if self.current_state == 0 {
-            self.current_score -= -1.0
+            self.current_score -= 1.0
         } else if self.current_state == self.s.len() - 1 {
             self.current_score += 1.0
         } else {
@@ -139,7 +136,9 @@ impl Env for LineEnv {
     }
 
     fn from_random_state(&mut self) {
-        panic!("Not yet implemented");
+        let mut rng = rand::thread_rng();
+        let random_location = rng.gen_range(1..self.s.len()-1);
+        self.current_state = random_location;
     }
 
     fn transition_probability(&self, state: usize, a: usize, s_p: usize, r_index: usize) -> f32 {
