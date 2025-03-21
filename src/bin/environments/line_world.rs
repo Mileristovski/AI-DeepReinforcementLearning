@@ -92,7 +92,7 @@ impl Env for LineEnv {
         println!();
     }
 
-    fn is_forbidden(&self, _action: usize) -> bool {
+    fn is_forbidden(&self, _action: i32) -> bool {
         panic!("Not yet implemented")
     }
 
@@ -138,10 +138,7 @@ impl Env for LineEnv {
         self.current_score
     }
 
-    fn from_random_state() -> Self
-    where
-        Self: Sized,
-    {
+    fn from_random_state(&mut self) {
         panic!("Not yet implemented");
     }
 

@@ -11,11 +11,11 @@ pub trait Env {
     fn state_id(&self) -> usize;
     fn reset(&mut self);
     fn display(&self);
-    fn is_forbidden(&self, action: usize) -> bool;
+    fn is_forbidden(&self, action: i32) -> bool;
     fn is_game_over(&self) -> bool;
     fn available_actions(&self) -> DVector<i32>;
     fn step(&mut self, action: i32);
     fn score(&self) -> f32;
-    fn from_random_state() -> Self where Self: Sized;
+    fn from_random_state(&mut self);
     fn transition_probability(&self, s: usize, a: usize, s_p: usize, r_index: usize) -> f32;
 }

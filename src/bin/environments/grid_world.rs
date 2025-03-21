@@ -1,5 +1,5 @@
 use nalgebra::DVector;
-
+use rand::Rng;
 use crate::environments::env::Env;
 
 pub struct GridEnv {
@@ -11,7 +11,7 @@ pub struct GridEnv {
     pub rows: usize,
     pub cols: usize,
     current_state: usize,
-    current_score: f32,
+    current_score: f32
 }
 
 impl GridEnv {
@@ -21,7 +21,11 @@ impl GridEnv {
         let s = DVector::from_vec(vec![0; rows * cols]);
         let a = DVector::from_vec(vec![0, 1, 2, 3]);
         let r = DVector::from_vec(vec![-1, 0, 1]);
-        let t = vec![0, 24];
+        let mut t = vec![0, (rows*cols)-1];
+        for col in 1..cols {
+            t.push(col*cols);
+            t.push(col*cols-1);
+        }
         let mut p = vec![vec![vec![vec![0.0; r.len()]; s.len()]; a.len()]; s.len()];
 
         for state in 0..s.len() {
@@ -34,7 +38,7 @@ impl GridEnv {
                     1 if row < rows - 1 => (row + 1, col), // Down
                     2 if col > 0 => (row, col - 1),        // Left
                     3 if col < cols - 1 => (row, col + 1), // Right
-                    _ => (row, col),                       // Stay in the current state (out of bounds)
+                    _ => (row, col),
                 };
 
                 let new_state = new_row * cols + new_col;
@@ -42,30 +46,20 @@ impl GridEnv {
                 // Handle terminal states
                 if state == 0 {
                     // Top-left: Terminal state with reward -1.0
-                    p[state][action][state][0] = 1.0; // Reward index 0 corresponds to -1
+                    p[state][action][state][0] = -1.0; // Reward index 0 corresponds to -1
                 } else if state == s.len() - 1 {
                     // Bottom-right: Terminal state with reward +1.0
                     p[state][action][state][2] = 1.0; // Reward index 2 corresponds to +1
                 } else {
                     // Non-terminal states
-                    p[state][action][new_state][1] = 1.0; // Reward index 1 corresponds to 0
+                    p[state][action][new_state][1] = -0.2; // Reward index 1 corresponds to 0
                 }
             }
         }
 
-        // Debug: Print the transition probabilities for verification
-        for state in 0..s.len() {
-            for action in 0..a.len() {
-                println!(
-                    "State: {}, Action: {}, Transition: {:?}",
-                    state, action, &p[state][action]
-                );
-            }
-        }
         // For simplicity, start at middle cell if possible,
         // otherwise just start at 0.
-        let grid_size = rows * cols;
-        let starting_state = if grid_size > 0 { grid_size / 2 } else { 0 };
+        let starting_state = (rows/2) * cols + (cols/2);
 
         GridEnv {
             s,
@@ -76,7 +70,7 @@ impl GridEnv {
             rows,
             cols,
             current_state: starting_state,
-            current_score: 0.0,
+            current_score: 0.0
         }
 
     }
@@ -150,10 +144,8 @@ impl Env for GridEnv {
         println!();
     }
 
-    fn is_forbidden(&self, _action: usize) -> bool {
-        // If you'd like to forbid certain actions in certain states, implement logic here.
-        // For this example, we do not forbid any action.
-        false
+    fn is_forbidden(&self, _action: i32) -> bool {
+        !self.available_actions().iter().any(|&x| x == _action)
     }
 
     fn is_game_over(&self) -> bool {
@@ -171,8 +163,9 @@ impl Env for GridEnv {
 
     fn step(&mut self, action: i32) {
         // Check if the action is valid.
-        if !self.available_actions().iter().any(|&x| x == action) {
-            panic!("Invalid action");
+        if self.is_forbidden(action) {
+            self.current_score -= 2.0;
+            return;
         }
 
         if self.is_game_over() {
@@ -180,7 +173,6 @@ impl Env for GridEnv {
         }
 
         let (mut row, mut col) = self.index_to_rc(self.current_state);
-
         match action {
             0 => { // Up
                 if row > 0 {
@@ -206,25 +198,23 @@ impl Env for GridEnv {
         };
 
         self.current_state = self.rc_to_index(row, col);
-
-        if self.current_state == (self.rows * self.cols - 1) {
+        if self.current_state % self.cols == self.cols - 1 {
             self.current_score += 1.0;
+        } else if (self.current_state % self.cols == 0) {
+            self.current_score -= 1.0;
         } else {
             self.current_score -= 0.1;
         }
     }
 
-    fn score(&self) -> f32 {
-        self.current_score
-    }
+    fn score(&self) -> f32 { self.current_score }
 
-    fn from_random_state() -> Self
-    where
-        Self: Sized,
-    {
-        // You might want to create a random grid or place the agent randomly.
-        // For now, we panic to match the style of the example.
-        panic!("Not yet implemented");
+    fn from_random_state(&mut self) {
+        self.reset();
+        let mut rng = rand::thread_rng();
+        let random_row = rng.gen_range(0..self.rows);
+        let random_col = rng.gen_range(1..(self.cols-1));
+        self.current_state = self.rc_to_index(random_row, random_col)
     }
 
     fn transition_probability(&self, s: usize, a: usize, s_p: usize, r_index: usize) -> f32 {

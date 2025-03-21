@@ -1,8 +1,11 @@
 use std::io;
+use std::thread::sleep;
+use std::time::Duration;
 use crate::environments::env::Env;
 use crate::services::testing::common::reset_screen;
 
 pub fn testing_env_manually<E: Env>(env: &mut E) {
+    env.from_random_state();
     let mut stdout = io::stdout();
     while !env.is_game_over() {
         reset_screen(&mut stdout, "");
@@ -27,14 +30,16 @@ pub fn testing_env_manually<E: Env>(env: &mut E) {
 
         match input.parse::<i32>() {
             Ok(action) => {
-                if available_actions.contains(&action) {
+                if available_actions.contains(&action) || true {
                     env.step(action);
                 } else {
                     println!("Invalid action: {}", action);
+                    sleep(Duration::from_secs(2));
                 }
             }
             Err(_) => {
                 println!("Please enter a valid number or 'quit' to exit.");
+                sleep(Duration::from_secs(2));
             }
         }
     }
