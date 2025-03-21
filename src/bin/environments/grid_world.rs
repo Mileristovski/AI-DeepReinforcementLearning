@@ -140,8 +140,8 @@ impl Env for GridEnv {
         println!();
     }
 
-    fn is_forbidden(&self, _action: i32) -> bool {
-        !self.available_actions().iter().any(|&x| x == _action)
+    fn is_forbidden(&self, action: i32) -> bool {
+        !self.available_actions().iter().any(|&x| x == action)
     }
 
     fn is_game_over(&self) -> bool {

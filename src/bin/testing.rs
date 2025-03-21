@@ -9,6 +9,7 @@ pub fn main() {
     let options = vec![
         "Line World",
         "Grid World",
+        "Tic Tac Toe",
         "Quit"
     ];
 
@@ -20,7 +21,8 @@ pub fn main() {
         match selected_index {
             0 => { testing_env_manually(&mut environments::line_world::LineEnv::new()); },
             1 => { testing_env_manually(&mut environments::grid_world::GridEnv::new()); },
-            2 => { break; }
+            2 => { testing_env_manually(&mut environments::tic_tac_toe::TicTacToeEnv::new()); },
+            3 => { break; }
             _ => {}
         }
         end_of_run();

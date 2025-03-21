@@ -30,16 +30,16 @@ pub fn testing_env_manually<E: Env>(env: &mut E) {
 
         match input.parse::<i32>() {
             Ok(action) => {
-                if available_actions.contains(&action) || true {
+                if available_actions.contains(&action) {
                     env.step(action);
                 } else {
                     println!("Invalid action: {}", action);
-                    sleep(Duration::from_secs(2));
+                    sleep(Duration::from_secs(1));
                 }
             }
             Err(_) => {
                 println!("Please enter a valid number or 'quit' to exit.");
-                sleep(Duration::from_secs(2));
+                sleep(Duration::from_secs(1));
             }
         }
     }
