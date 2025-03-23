@@ -4,11 +4,11 @@ use std::time::Duration;
 use crate::environments::env::Env;
 use crate::services::testing::common::reset_screen;
 
-pub fn testing_env_manually<E: Env>(env: &mut E) {
+pub fn testing_env_manually<E: Env>(env: &mut E, env_name: &str) {
     env.from_random_state();
     let mut stdout = io::stdout();
     while !env.is_game_over() {
-        reset_screen(&mut stdout, "");
+        reset_screen(&mut stdout, env_name);
 
         env.display();
         println!("Score: {}", env.score());
