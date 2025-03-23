@@ -7,8 +7,8 @@ use rand::thread_rng;
 pub struct BobailEnv {
     pub board: [ColoredString; 25],
     actions: DVector<i32>,
-    current_player: ColoredString,
-    previous_player: ColoredString,
+    pub current_player: ColoredString,
+    pub previous_player: ColoredString,
     current_state: usize,
     game_over: bool,
     winner: ColoredString,
@@ -17,9 +17,9 @@ pub struct BobailEnv {
     r: Vec<f32>,
     rows: usize,
     cols: usize,
-    blue_player: ColoredString,
-    red_player: ColoredString,
-    bobeil: ColoredString,
+    pub blue_player: ColoredString,
+    pub red_player: ColoredString,
+    pub bobeil: ColoredString,
     bobeil_move: bool,
 }
 
@@ -299,7 +299,8 @@ impl Env for BobailEnv {
             }
         }
 
-        self.current_player = self.blue_player.clone();
+        self.current_player = self.bobeil.clone();
+        self.previous_player = self.red_player.clone();
         self.game_over = false;
         self.winner = "0".normal();
         self.bobeil_move = false;
