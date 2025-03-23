@@ -205,7 +205,7 @@ impl Env for GridEnv {
 
     fn score(&self) -> f32 { self.current_score }
 
-    fn from_random_state(&mut self) {
+    fn start_from_random_state(&mut self) {
         // Reset the game
         self.reset();
 

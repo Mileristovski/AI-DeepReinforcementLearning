@@ -204,7 +204,7 @@ impl Env for TicTacToeEnv {
 
     fn score(&self) -> f32 { self.current_score }
 
-    fn from_random_state(&mut self) { self.reset() }
+    fn start_from_random_state(&mut self) { self.reset() }
 
     fn transition_probability(&self, _s: usize, _a: usize, _s_p: usize, _r_index: usize) -> f32 {
         unimplemented!("Slows down application too much")

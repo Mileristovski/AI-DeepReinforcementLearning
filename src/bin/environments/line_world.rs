@@ -135,7 +135,7 @@ impl Env for LineEnv {
         self.current_score
     }
 
-    fn from_random_state(&mut self) {
+    fn start_from_random_state(&mut self) {
         let mut rng = rand::thread_rng();
         let random_location = rng.gen_range(1..self.s.len()-1);
         self.current_state = random_location;
