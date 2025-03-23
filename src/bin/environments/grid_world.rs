@@ -114,8 +114,8 @@ impl Env for GridEnv {
         self.current_score
     }
 
-    fn state_id(&self) -> usize {
-        self.current_state
+    fn state_id(&self) -> Vec<i32> {
+        vec![self.current_state as i32]
     }
 
     fn reset(&mut self) {

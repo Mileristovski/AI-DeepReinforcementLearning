@@ -142,7 +142,7 @@ impl Env for TicTacToeEnv {
 
     fn get_reward(&self, _num: usize) -> f32 { if self.winner == Some('X') { 1.0 } else { -1.0 } }
 
-    fn state_id(&self) -> usize { self.current_state }
+    fn state_id(&self) -> Vec<i32> { vec![self.current_state as i32] }
 
     fn reset(&mut self) {
         self.board = [' '; 9];
