@@ -5,7 +5,7 @@ use crate::environments::env::Env;
 pub struct GridEnv {
     s: DVector<i32>,
     a: DVector<i32>,
-    r: DVector<i32>,
+    r: DVector<f32>,
     p: Vec<Vec<Vec<Vec<f32>>>>,
     t: Vec<usize>,
     pub rows: usize,
@@ -20,7 +20,7 @@ impl GridEnv {
         let cols = 5;
         let s = DVector::from_vec(vec![0; rows * cols]);
         let a = DVector::from_vec(vec![0, 1, 2, 3]);
-        let r = DVector::from_vec(vec![-1, 0, 1]);
+        let r = DVector::from_vec(vec![-1.0, -0.1, 1.0]);
         let mut t = vec![0, (rows*cols)-1];
         for col in 1..cols {
             t.push(col*cols);
@@ -195,11 +195,11 @@ impl Env for GridEnv {
 
         self.current_state = self.rc_to_index(row, col);
         if col == self.cols - 1 {
-            self.current_score += 1.0;
+            self.current_score += self.r[2];
         } else if col == 0 {
-            self.current_score -= 1.0;
+            self.current_score += self.r[0];
         } else {
-            self.current_score -= 0.1;
+            self.current_score += self.r[1];
         }
     }
 
