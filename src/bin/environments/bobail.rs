@@ -1,9 +1,8 @@
-use std::thread::sleep;
-use std::time::Duration;
 use nalgebra::DVector;
 use crate::environments::env::Env;
 use colored::*;
-use crossterm::style::Stylize;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 
 pub struct BobailEnv {
     pub board: [ColoredString; 25],
@@ -266,7 +265,45 @@ impl Env for BobailEnv {
 
     fn score(&self) -> f32 { self.current_score }
 
-    fn from_random_state(&mut self) { self.reset() }
+    fn start_from_random_state(&mut self) {
+        self.board = core::array::from_fn(|_| " ".normal());
+        let mut rng = thread_rng();
+
+        // Get all board positions except first and last row for bobeil
+        let valid_positions: Vec<usize> = (self.cols..self.board.len() - self.cols).collect();
+
+        // Place bobeil randomly
+        if let Some(&bobeil_pos) = valid_positions.choose(&mut rng) {
+            self.board[bobeil_pos] = self.bobeil.clone();
+        }
+
+        // Get all empty positions
+        let mut empty_positions: Vec<usize> = self.board.iter()
+            .enumerate()
+            .filter_map(|(idx, c)| if *c == " ".normal() { Some(idx) } else { None })
+            .collect();
+
+        empty_positions.shuffle(&mut rng);
+
+        // Place 5 blue pieces
+        for _ in 0..5 {
+            if let Some(pos) = empty_positions.pop() {
+                self.board[pos] = self.blue_player.clone();
+            }
+        }
+
+        // Place 5 red pieces
+        for _ in 0..5 {
+            if let Some(pos) = empty_positions.pop() {
+                self.board[pos] = self.red_player.clone();
+            }
+        }
+
+        self.current_player = self.blue_player.clone();
+        self.game_over = false;
+        self.winner = "0".normal();
+        self.bobeil_move = false;
+    }
 
     fn transition_probability(&self, _s: usize, _a: usize, _s_p: usize, _r_index: usize) -> f32 {
         unimplemented!("Slows down application too much")
