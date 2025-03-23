@@ -153,7 +153,7 @@ impl BobailEnv {
 }
 
 impl Env for BobailEnv {
-    fn num_states(&self) -> usize { todo!() }
+    fn num_states(&self) -> usize { self.board.len() }
 
     fn num_actions(&self) -> usize { self.actions.len() }
 
