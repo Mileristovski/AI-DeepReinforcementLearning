@@ -1,15 +1,17 @@
+use std::collections::HashMap;
 use nalgebra::DVector;
-use crate::environments::env::Env;
 use colored::*;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
+use regex::Regex;
+
+use crate::environments::env::Env;
 
 pub struct BobailEnv {
     pub board: [ColoredString; 25],
     actions: DVector<i32>,
     pub current_player: ColoredString,
     pub previous_player: ColoredString,
-    current_state: usize,
     game_over: bool,
     winner: ColoredString,
     terminal_states: Vec<usize>,
@@ -35,7 +37,6 @@ impl BobailEnv {
         let actions = DVector::from_vec((0..8).collect());
         let current_player = blue_player.clone();
         let previous_player = blue_player.clone();
-        let current_state = 0;
         let game_over = false;
         let winner = "0".normal();
         let current_score = 0.0;
@@ -44,11 +45,10 @@ impl BobailEnv {
 
 
         let mut env = Self {
-            board,
             actions,
             current_player,
             previous_player,
-            current_state,
+            board,
             game_over,
             winner,
             terminal_states,
@@ -149,6 +149,11 @@ impl BobailEnv {
 
         possible_moves
     }
+
+    fn clean_string(s: &str) -> String {
+        let ansi_escape = Regex::new("\x1b\\[[0-9;]*m").unwrap();
+        ansi_escape.replace_all(s, "").to_string()
+    }
 }
 
 impl Env for BobailEnv {
@@ -164,7 +169,22 @@ impl Env for BobailEnv {
 
     fn get_reward(&self, _num: usize) -> f32 { self.r[_num] }
 
-    fn state_id(&self) -> usize { self.current_state }
+    fn state_id(&self) -> Vec<i32> {
+        let mut color_mapping = HashMap::new();
+        color_mapping.insert("B", 1);
+        color_mapping.insert("R", 2);
+        color_mapping.insert("Y", 3);
+        color_mapping.insert(" ", 0);
+
+        self.board
+            .iter()
+            .map(|cell| {
+                let cleaned_color = Self::clean_string(&cell.to_string());
+                println!("cell.to_string() = {:?}", cleaned_color);
+                color_mapping.get(cleaned_color.as_str()).copied().unwrap_or(0)
+            })
+            .collect::<Vec<i32>>()
+    }
 
     fn reset(&mut self) {
         self.board = core::array::from_fn(|_| " ".normal());

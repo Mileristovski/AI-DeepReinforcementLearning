@@ -7,7 +7,7 @@
         fn get_reward_vector(&self) -> Vec<f32>;
         fn get_terminal_states(&self) -> Vec<usize>;
         fn get_reward(&self, num: usize) -> f32;
-        fn state_id(&self) -> usize;
+        fn state_id(&self) -> Vec<i32>;
         fn reset(&mut self);
         fn display(&self);
         fn is_forbidden(&self, action: i32) -> bool;
