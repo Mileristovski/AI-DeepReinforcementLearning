@@ -5,6 +5,7 @@ mod gui;
 
 use crossterm::terminal::disable_raw_mode;
 use crate::services::testing::envs::testing_env_manually;
+use crate::services::testing::envs::testing_env_manually_random;
 use crate::services::testing::common::{clear_screen, end_of_run, user_choice};
 
 fn main() {
@@ -17,7 +18,8 @@ fn main() {
             "Line World",
             "Grid World",
             "Tic Tac Toe",
-            "Bobeil",
+            "Bobeil avec un autre joeur",
+            "Bobeil avec un jouer random",
             "Quit"
         ];
 
@@ -30,7 +32,8 @@ fn main() {
             2 => { testing_env_manually(&mut environments::grid_world::GridEnv::new(), options[selected_index], from_random); },
             3 => { testing_env_manually(&mut environments::tic_tac_toe::TicTacToeEnv::new(), options[selected_index], from_random); },
             4 => { testing_env_manually(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
-            5 => { break; }
+            5 => { testing_env_manually_random(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
+            6 => { break; }
             _ => {}
         }
         end_of_run();
