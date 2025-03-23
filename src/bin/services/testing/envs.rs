@@ -5,6 +5,7 @@ use rand::Rng;
 use crate::environments::env::Env;
 use crate::environments::bobail::BobailEnv;
 use crate::services::testing::common::reset_screen;
+use std::time::Instant;
 
 pub fn testing_env_manually<E: Env>(env: &mut E, env_name: &str, from_random: bool) {
     if from_random { env.start_from_random_state() };
@@ -58,7 +59,7 @@ pub fn testing_env_manually_random(env: &mut BobailEnv, env_name: &str, from_ran
 
     let mut stdout = io::stdout();
     while !env.is_game_over() {
-        if env.current_player == env.red_player || (env.current_player == env.bobeil && env.previous_player == env.blue_player) {
+        if env.current_player == env.red_player || (env.current_player == env.bobail && env.previous_player == env.blue_player) {
             let available_actions: Vec<_> = env.available_actions().iter().cloned().collect();
             let mut rng = rand::thread_rng();
             let index = rng.gen_range(0..available_actions.len());
@@ -107,4 +108,59 @@ pub fn testing_env_manually_random(env: &mut BobailEnv, env_name: &str, from_ran
     println!("Game Over!");
     println!("Score: {}", env.score());
     env.reset();
+}
+
+pub fn benchmark_random_agents(env: &mut BobailEnv, env_name: &str, from_random: bool) {
+    let mut time = 50;
+    let mut input = String::new();
+    println!("Enter the number of games to simulate:");
+    io::stdin().read_line(&mut input).expect("Failed to read input");
+    let num_games: usize = input.trim().parse().unwrap_or(10);
+
+    input.clear();
+    println!("Enable visual mode? (yes/no):");
+    io::stdin().read_line(&mut input).expect("Failed to read input");
+    let visual = input.trim().eq_ignore_ascii_case("yes");
+
+    if visual {
+        input.clear();
+        println!("How long should a match last ? (in milliseconds) :");
+        io::stdin().read_line(&mut input).expect("Failed to read input");
+        time = input.trim().parse().unwrap_or(50);
+    }
+    let mut rng = rand::thread_rng();
+    let start = Instant::now();
+    let mut games_played = 0;
+
+    for _ in 0..num_games {
+        if from_random { env.start_from_random_state() } else { env.reset()};
+
+        while !env.is_game_over() {
+            let available_actions: Vec<_> = env.available_actions().iter().cloned().collect();
+            if available_actions.is_empty() {
+                break;
+            }
+            let index = rng.gen_range(0..available_actions.len());
+            let action = available_actions[index];
+            env.step(action);
+            if visual {
+                let mut stdout = io::stdout();
+                env.display();
+                sleep(Duration::from_millis(time));
+                reset_screen(&mut stdout, env_name);
+            }
+        }
+
+        games_played += 1;
+    }
+
+    let duration = start.elapsed();
+    let games_per_second = games_played as f64 / duration.as_secs_f64();
+
+    println!(
+        "Jouées: {} parties en {:?} secondes ({:.2} parties/sec)",
+        games_played,
+        duration.as_secs_f64(),
+        games_per_second
+    );
 }

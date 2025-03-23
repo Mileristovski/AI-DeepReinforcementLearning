@@ -21,8 +21,8 @@ pub struct BobailEnv {
     cols: usize,
     pub blue_player: ColoredString,
     pub red_player: ColoredString,
-    pub bobeil: ColoredString,
-    bobeil_move: bool,
+    pub bobail: ColoredString,
+    bobail_move: bool,
 }
 
 impl BobailEnv {
@@ -32,7 +32,7 @@ impl BobailEnv {
         const COLS: usize = 5;
         let blue_player = Colorize::blue("B");
         let red_player = Colorize::red("R");
-        let bobeil = Colorize::yellow("Y");
+        let bobail = Colorize::yellow("Y");
         let mut board: [ColoredString; ROWS * COLS] = std::array::from_fn(|_| " ".normal());
         let actions = DVector::from_vec((0..8).collect());
         let current_player = blue_player.clone();
@@ -41,7 +41,7 @@ impl BobailEnv {
         let winner = "0".normal();
         let current_score = 0.0;
         let r = vec![-1.0f32, -0.1, 1.0];
-        let bobeil_move = false;
+        let bobail_move = false;
 
 
         let mut env = Self {
@@ -58,8 +58,8 @@ impl BobailEnv {
             cols: COLS,
             blue_player,
             red_player,
-            bobeil,
-            bobeil_move
+            bobail,
+            bobail_move
         };
 
         env.init_board();
@@ -79,7 +79,7 @@ impl BobailEnv {
         }
 
         // Add the bobail
-        self.board[self.board.len()/2] = self.bobeil.clone();
+        self.board[self.board.len()/2] = self.bobail.clone();
     }
 
     pub fn get_row_col(action: i32) -> (usize, usize, usize, usize) {
@@ -192,7 +192,7 @@ impl Env for BobailEnv {
         self.current_player = self.blue_player.clone();
         self.game_over = false;
         self.winner = "0".normal();
-        self.bobeil_move = false;
+        self.bobail_move = false;
     }
 
     fn display(&self) {
@@ -209,12 +209,12 @@ impl Env for BobailEnv {
     }
 
     fn is_game_over(&self) -> bool {
-        let bobeil_index: Vec<usize> = self.board.iter()
+        let bobail_index: Vec<usize> = self.board.iter()
             .enumerate()
-            .filter_map(|(idx, c)| if *c == self.bobeil { Some(idx) } else { None })
+            .filter_map(|(idx, c)| if *c == self.bobail { Some(idx) } else { None })
             .collect();
 
-        self.terminal_states.iter().any(|&x| x == bobeil_index[0]) || self.available_actions().is_empty()
+        self.terminal_states.iter().any(|&x| x == bobail_index[0]) || self.available_actions().is_empty()
     }
 
     fn available_actions(&self) -> DVector<i32> {
@@ -228,7 +228,7 @@ impl Env for BobailEnv {
         for &elem in indexes.iter() {
             let mut row = (elem / self.rows) as i32;
             let mut col = (elem % self.cols) as i32;
-            let mut all_moves = Self::get_possible_moves(&self, row as usize, col as usize, self.bobeil_move);
+            let mut all_moves = Self::get_possible_moves(&self, row as usize, col as usize, self.bobail_move);
             for action in all_moves.iter() {
                 available_action.push((row+1)*1000 + (col+1)*100 + (action[0]+1)*10 + action[1]+1);
             }
@@ -249,16 +249,16 @@ impl Env for BobailEnv {
         self.board[new_row*self.cols + new_col] = self.current_player.clone();
 
         // Change player
-        self.current_player = if self.current_player == self.bobeil && self.previous_player == self.blue_player {
-            self.bobeil_move = false;
+        self.current_player = if self.current_player == self.bobail && self.previous_player == self.blue_player {
+            self.bobail_move = false;
             self.red_player.clone()
-        } else if self.current_player == self.bobeil && self.previous_player == self.red_player {
-            self.bobeil_move = false;
+        } else if self.current_player == self.bobail && self.previous_player == self.red_player {
+            self.bobail_move = false;
             self.blue_player.clone()
         } else {
-            self.bobeil_move = true;
+            self.bobail_move = true;
             self.previous_player = self.current_player.clone();
-            self.bobeil.clone()
+            self.bobail.clone()
         };
 
         // Verify if the game is over
@@ -289,12 +289,12 @@ impl Env for BobailEnv {
         self.board = core::array::from_fn(|_| " ".normal());
         let mut rng = thread_rng();
 
-        // Get all board positions except first and last row for bobeil
+        // Get all board positions except first and last row for bobail
         let valid_positions: Vec<usize> = (self.cols..self.board.len() - self.cols).collect();
 
-        // Place bobeil randomly
-        if let Some(&bobeil_pos) = valid_positions.choose(&mut rng) {
-            self.board[bobeil_pos] = self.bobeil.clone();
+        // Place bobail randomly
+        if let Some(&bobail_pos) = valid_positions.choose(&mut rng) {
+            self.board[bobail_pos] = self.bobail.clone();
         }
 
         // Get all empty positions
@@ -319,11 +319,11 @@ impl Env for BobailEnv {
             }
         }
 
-        self.current_player = self.bobeil.clone();
+        self.current_player = self.bobail.clone();
         self.previous_player = self.red_player.clone();
         self.game_over = false;
         self.winner = "0".normal();
-        self.bobeil_move = false;
+        self.bobail_move = false;
     }
 
     fn transition_probability(&self, _s: usize, _a: usize, _s_p: usize, _r_index: usize) -> f32 {
