@@ -1,6 +1,4 @@
-    use nalgebra::{DVector};
-
-    pub trait Env {
+ pub trait Env {
         fn num_states(&self) -> usize;
         fn num_actions(&self) -> usize;
         fn num_rewards(&self) -> usize;
@@ -12,7 +10,7 @@
         fn display(&self);
         fn is_forbidden(&self, action: i32) -> bool;
         fn is_game_over(&self) -> bool;
-        fn available_actions(&self) -> DVector<i32>;
+        fn available_actions(&self) -> Vec<i32>;
         fn step(&mut self, action: i32);
         fn score(&self) -> f32;
         fn start_from_random_state(&mut self);

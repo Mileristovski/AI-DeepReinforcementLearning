@@ -1,10 +1,9 @@
-use nalgebra::DVector;
 use crate::environments::env::Env;
 use std::collections::HashMap;
 
 pub struct TicTacToeEnv {
     board: [char; 9],
-    actions: DVector<i32>,
+    actions: Vec<i32>,
     current_player: char,
     pub current_state: usize,
     pub game_over: bool,
@@ -22,7 +21,7 @@ impl TicTacToeEnv {
             [0, 4, 8], [2, 4, 6],           // Diagonals
         ];
         let board = [' '; 9];
-        let actions = DVector::from_vec((0..9).collect());
+        let actions = (0..9).collect();
         let current_player = 'X';
         let current_state = 0;
         let game_over = false;
@@ -165,7 +164,7 @@ impl Env for TicTacToeEnv {
 
     fn is_game_over(&self) -> bool { self.game_over }
 
-    fn available_actions(&self) -> DVector<i32> { DVector::from_vec(self.board.iter().enumerate().filter(|&(_, &c)| c == ' ').map(|(i, _)| i as i32).collect()) }
+    fn available_actions(&self) -> Vec<i32> { self.board.iter().enumerate().filter(|&(_, &c)| c == ' ').map(|(i, _)| i as i32).collect() }
 
     fn step(&mut self, action: i32) {
         if self.game_over || self.is_forbidden(action) {

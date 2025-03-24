@@ -4,7 +4,7 @@ use crate::environments::env::Env;
 
 pub struct GridEnv {
     s: DVector<i32>,
-    a: DVector<i32>,
+    a: Vec<i32>,
     r: DVector<f32>,
     p: Vec<Vec<Vec<Vec<f32>>>>,
     t: Vec<usize>,
@@ -19,7 +19,7 @@ impl GridEnv {
         let rows = 5;
         let cols = 5;
         let s = DVector::from_vec(vec![0; rows * cols]);
-        let a = DVector::from_vec(vec![0, 1, 2, 3]);
+        let a = vec![0, 1, 2, 3];
         let r = DVector::from_vec(vec![-1.0, -0.1, 1.0]);
         let mut t = vec![0, (rows*cols)-1];
         for col in 1..cols {
@@ -149,9 +149,9 @@ impl Env for GridEnv {
         self.t.contains(&self.current_state)
     }
 
-    fn available_actions(&self) -> DVector<i32> {
+    fn available_actions(&self) -> Vec<i32> {
         if self.is_game_over() {
-            DVector::zeros(0)
+            vec![0]
         } else {
             self.a.clone()
         }

@@ -217,7 +217,7 @@ impl Env for BobailEnv {
         self.terminal_states.iter().any(|&x| x == bobail_index[0]) || self.available_actions().is_empty() ||self.game_over
     }
 
-    fn available_actions(&self) -> DVector<i32> {
+    fn available_actions(&self) -> Vec<i32> {
         let mut available_action = Vec::new();
 
         let indexes: Vec<usize> = self.board.iter()
@@ -234,7 +234,7 @@ impl Env for BobailEnv {
             }
         }
 
-        DVector::from_vec(available_action)
+        available_action
     }
 
     fn step(&mut self, action: i32) {

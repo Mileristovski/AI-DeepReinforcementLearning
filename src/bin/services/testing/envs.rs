@@ -135,7 +135,7 @@ pub fn benchmark_random_agents(env: &mut BobailEnv, env_name: &str, from_random:
         if from_random { env.start_from_random_state() } else { env.reset()};
 
         while !env.is_game_over() {
-            let available_actions: Vec<_> = env.available_actions().iter().cloned().collect();
+            let available_actions: Vec<_> = env.available_actions();//.iter().cloned().collect();
             if available_actions.is_empty() {
                 break;
             }

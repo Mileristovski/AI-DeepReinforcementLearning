@@ -4,7 +4,7 @@ use crate::environments::env::Env;
 
 pub struct LineEnv {
     s: DVector<i32>,
-    a: DVector<i32>,
+    a: Vec<i32>,
     r: DVector<i32>,
     t: Vec<usize>,
     p: Vec<Vec<Vec<Vec<f32>>>>,
@@ -15,7 +15,7 @@ pub struct LineEnv {
 impl LineEnv {
     pub fn new() -> Self {
         let s = DVector::from_vec((0..=5).collect());
-        let a = DVector::from_vec(vec![0, 1]);
+        let a = vec![0, 1];
         let r = DVector::from_vec(vec![-1, 0, 1]);
         let t = vec![0, s.len()-1];
         let mut p = vec![vec![vec![vec![0.0f32; r.len()]; s.len()]; a.len()]; s.len()];
@@ -97,9 +97,9 @@ impl Env for LineEnv {
         self.t.contains(&self.current_state)
     }
 
-    fn available_actions(&self) -> DVector<i32>  {
+    fn available_actions(&self) -> Vec<i32>  {
         if self.is_game_over() {
-            DVector::zeros(0)
+            vec![0]
         } else {
             self.a.clone()
         }
