@@ -40,7 +40,7 @@ impl BobailEnv {
         let game_over = false;
         let winner = "0".normal();
         let current_score = 0.0;
-        let r = vec![-1.0f32, -0.1, 1.0];
+        let r = vec![-1.0f32, 0.0, 1.0];
         let bobail_move = false;
 
 
@@ -193,6 +193,7 @@ impl Env for BobailEnv {
         self.game_over = false;
         self.winner = "0".normal();
         self.bobail_move = false;
+        self.current_score = 0.0;
     }
 
     fn display(&self) {
@@ -214,7 +215,7 @@ impl Env for BobailEnv {
             .filter_map(|(idx, c)| if *c == self.bobail { Some(idx) } else { None })
             .collect();
 
-        self.terminal_states.iter().any(|&x| x == bobail_index[0]) || self.available_actions().is_empty()
+        self.terminal_states.iter().any(|&x| x == bobail_index[0]) || self.available_actions().is_empty() ||self.game_over
     }
 
     fn available_actions(&self) -> DVector<i32> {
@@ -238,7 +239,7 @@ impl Env for BobailEnv {
     }
 
     fn step(&mut self, action: i32) {
-        if self.is_forbidden(action) {
+        if self.game_over || self.is_forbidden(action) {
             return;
         }
 
@@ -278,7 +279,7 @@ impl Env for BobailEnv {
             self.current_score += self.get_reward(2);
         } else if self.game_over && self.winner == self.red_player {
             self.current_score += self.get_reward(0);
-        } else if self.previous_player == self.blue_player {
+        } else if self.current_player == self.blue_player && !self.bobail_move {
             self.current_score += self.get_reward(1); // Add a movement penalty
         }
     }
@@ -324,6 +325,7 @@ impl Env for BobailEnv {
         self.game_over = false;
         self.winner = "0".normal();
         self.bobail_move = false;
+        self.current_score = 0.0;
     }
 
     fn transition_probability(&self, _s: usize, _a: usize, _s_p: usize, _r_index: usize) -> f32 {
