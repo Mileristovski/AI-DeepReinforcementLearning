@@ -1,4 +1,3 @@
-use nalgebra::DVector;
 use colored::*;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
@@ -8,7 +7,6 @@ use crate::environments::env::Env;
 
 pub struct BobailEnv {
     pub board: [usize; 25],
-    actions: DVector<i32>,
     pub current_player: usize,
     pub previous_player: usize,
     game_over: bool,
@@ -35,9 +33,7 @@ impl BobailEnv {
         let red_player = 2;
         let bobail = 3;
         let empty = 0;
-        // let mut board: [ColoredString; ROWS * COLS] = std::array::from_fn(|_| self.empty);
         let mut board: [usize; ROWS * COLS] = [0; ROWS * COLS];
-        let actions = DVector::from_vec((0..8).collect());
         let current_player = blue_player.clone();
         let previous_player = blue_player.clone();
         let game_over = false;
@@ -58,7 +54,6 @@ impl BobailEnv {
 
 
         let mut env = Self {
-            actions,
             current_player,
             previous_player,
             board,
@@ -222,7 +217,7 @@ impl BobailEnv {
 impl Env for BobailEnv {
     fn num_states(&self) -> usize { self.board.len() }
 
-    fn num_actions(&self) -> usize { self.actions.len() }
+    fn num_actions(&self) -> usize { self.get_input_vec().len() }
 
     fn num_rewards(&self) -> usize { self.r.len() }
 
