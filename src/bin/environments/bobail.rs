@@ -23,6 +23,7 @@ pub struct BobailEnv {
     pub red_player: ColoredString,
     pub bobail: ColoredString,
     bobail_move: bool,
+    directions:  [(isize, isize, isize); 8]
 }
 
 impl BobailEnv {
@@ -42,6 +43,16 @@ impl BobailEnv {
         let current_score = 0.0;
         let r = vec![-1.0f32, 0.0, 1.0];
         let bobail_move = false;
+        let directions = [
+            (-1, 0, 0),     // Up
+            (1, 0, 1),      // Down
+            (0, -1, 2),     // Left
+            (0, 1, 3),      // Right
+            (-1, -1, 4),    // Up-Left
+            (-1, 1, 5),     // Up-Right
+            (1, -1, 6),     // Down-Left
+            (1, 1, 7),      // Down-Right
+        ];
 
 
         let mut env = Self {
@@ -59,7 +70,8 @@ impl BobailEnv {
             blue_player,
             red_player,
             bobail,
-            bobail_move
+            bobail_move,
+            directions
         };
 
         env.init_board();
@@ -82,40 +94,49 @@ impl BobailEnv {
         self.board[self.board.len()/2] = self.bobail.clone();
     }
 
-    pub fn get_row_col(action: i32) -> (usize, usize, usize, usize) {
-        let current_row = action/1000;
-        let current_col = action%1000/100;
-        let new_row = action%100/10;
-        let new_col = action%10;
+    pub fn get_row_col(action: i32) -> (usize, usize, usize) {
+        let current_row = action/100;
+        let current_col = action%100/10;
+        let direction = action%10;
 
-        ((current_row - 1) as usize, (current_col - 1) as usize, (new_row - 1) as usize, (new_col - 1) as usize)
+        ((current_row - 1) as usize, (current_col - 1) as usize, direction as usize)
     }
 
-    fn get_possible_moves(&self, row: usize, col: usize, bobail: bool) -> Vec<Vec<i32>> {
-        let directions = [
-            (-1, 0, 0),     // Up
-            (1, 0, 1),      // Down
-            (0, -1, 2),     // Left
-            (0, 1, 3),      // Right
-            (-1, -1, 4),    // Up-Left
-            (-1, 1, 5),     // Up-Right
-            (1, -1, 6),     // Down-Left
-            (1, 1, 7),      // Down-Right
-        ];
-
+    fn get_possible_moves(&self, row: usize, col: usize) -> Vec<isize> {
         let mut possible_moves = Vec::new();
-        let mut new_row;
-        let mut new_col;
 
-        for &(dr, dc, name) in &directions {
-            if bobail {
+        for &(dr, dc, direction) in &self.directions {
+            let new_row = row as isize + dr;
+            let new_col = col as isize + dc;
+
+            // Check if the new position is within bounds
+            if new_row >= 0 && new_row < self.rows as isize && new_col >= 0 && new_col < self.cols as isize {
+                let index = (new_row as usize) * self.cols + (new_col as usize);
+                if self.board[index] == " ".normal() { // Only move if the spot is empty
+                    possible_moves.push(direction);
+                }
+            }
+        }
+        possible_moves
+    }
+
+    fn move_piece(&mut self, action: i32) -> (usize, usize) {
+
+        let ( mut row, mut col, dir) = Self::get_row_col(action);
+        let mut new_row = 0;
+        let mut new_col = 0;
+
+        // Move as far as possible in the given direction
+        let correct_direction = self.directions.iter().find(|&&(dr, dc, direction)| direction == dir as isize);
+
+        for &(dr, dc, name) in &correct_direction {
+            if self.bobail_move {
                 new_row = row as isize + dr;
                 new_col = col as isize + dc;
             } else {
-                // Move as far as possible in the given direction
                 new_row = row as isize;
                 new_col = col as isize;
-
+                // Move as far as possible in the given direction
                 loop {
                     let next_row = new_row + dr;
                     let next_col = new_col + dc;
@@ -139,15 +160,14 @@ impl BobailEnv {
             }
 
             // Check if the new position is within bounds
-            if new_row >= 0 && new_row < self.rows as isize && new_col >= 0 && new_col < self.cols as isize {
-                let index = (new_row as usize) * self.cols + (new_col as usize);
-                if self.board[index] == " ".normal() { // Only move if the spot is empty
-                    possible_moves.push(vec![new_row as i32, new_col as i32]);
-                }
+            let index = (new_row as usize) * self.cols + (new_col as usize);
+            if self.board[index] == " ".normal() {
+                self.board[row * self.rows + col] = " ".normal();
+                self.board[new_row as usize * self.rows + new_col as usize] = self.current_player.clone();
             }
         }
 
-        possible_moves
+        (new_row as usize, new_col as usize)
     }
 
     fn clean_string(s: &str) -> String {
@@ -228,9 +248,9 @@ impl Env for BobailEnv {
         for &elem in indexes.iter() {
             let mut row = (elem / self.rows) as i32;
             let mut col = (elem % self.cols) as i32;
-            let mut all_moves = Self::get_possible_moves(&self, row as usize, col as usize, self.bobail_move);
+            let mut all_moves = Self::get_possible_moves(&self, row as usize, col as usize);
             for action in all_moves.iter() {
-                available_action.push((row+1)*1000 + (col+1)*100 + (action[0]+1)*10 + action[1]+1);
+                available_action.push((row+1)*100 + (col+1)*10 + *action as i32);
             }
         }
 
@@ -242,11 +262,8 @@ impl Env for BobailEnv {
             return;
         }
 
-        let (row, col, new_row, new_col) = Self::get_row_col(action);
-
         // Move the piece
-        self.board[row*self.cols + col] = " ".normal();
-        self.board[new_row*self.cols + new_col] = self.current_player.clone();
+        let (new_row, _) = Self::move_piece(self, action);
 
         // Change player
         self.current_player = if self.current_player == self.bobail && self.previous_player == self.blue_player {
