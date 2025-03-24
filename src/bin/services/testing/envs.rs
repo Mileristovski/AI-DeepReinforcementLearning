@@ -131,7 +131,6 @@ pub fn benchmark_random_agents(env: &mut BobailEnv, env_name: &str, from_random:
     let mut rng = rand::thread_rng();
     let start = Instant::now();
     let mut games_played = 0;
-    let mut score_total = 0.0;
     for _ in 0..num_games {
         if from_random { env.start_from_random_state() } else { env.reset()};
 
@@ -150,7 +149,6 @@ pub fn benchmark_random_agents(env: &mut BobailEnv, env_name: &str, from_random:
                 reset_screen(&mut stdout, env_name);
             }
         }
-        score_total += env.score();
         games_played += 1;
     }
 
@@ -161,7 +159,7 @@ pub fn benchmark_random_agents(env: &mut BobailEnv, env_name: &str, from_random:
         "Jouées: {} parties en {:?} secondes, avec un score de {:?} ({:.2} parties/sec)",
         games_played,
         duration.as_secs_f64(),
-        score_total,
+        env.score(),
         games_per_second
     );
 }

@@ -193,7 +193,6 @@ impl Env for BobailEnv {
         self.game_over = false;
         self.winner = "0".normal();
         self.bobail_move = false;
-        self.current_score = 0.0;
     }
 
     fn display(&self) {
@@ -325,7 +324,6 @@ impl Env for BobailEnv {
         self.game_over = false;
         self.winner = "0".normal();
         self.bobail_move = false;
-        self.current_score = 0.0;
     }
 
     fn transition_probability(&self, _s: usize, _a: usize, _s_p: usize, _r_index: usize) -> f32 {
