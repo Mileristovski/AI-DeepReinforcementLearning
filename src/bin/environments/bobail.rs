@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use nalgebra::DVector;
 use colored::*;
 use rand::seq::SliceRandom;
@@ -8,22 +7,23 @@ use regex::Regex;
 use crate::environments::env::Env;
 
 pub struct BobailEnv {
-    pub board: [ColoredString; 25],
+    pub board: [usize; 25],
     actions: DVector<i32>,
-    pub current_player: ColoredString,
-    pub previous_player: ColoredString,
+    pub current_player: usize,
+    pub previous_player: usize,
     game_over: bool,
-    winner: ColoredString,
+    winner: usize,
     terminal_states: Vec<usize>,
     current_score: f32,
     r: Vec<f32>,
     rows: usize,
     cols: usize,
-    pub blue_player: ColoredString,
-    pub red_player: ColoredString,
-    pub bobail: ColoredString,
+    pub blue_player: usize,
+    pub red_player: usize,
+    pub bobail: usize,
     bobail_move: bool,
-    directions:  [(isize, isize, isize); 8]
+    directions:  [(isize, isize, isize); 8],
+    empty: usize
 }
 
 impl BobailEnv {
@@ -31,15 +31,17 @@ impl BobailEnv {
         let terminal_states = vec!(0usize, 1, 2, 3, 4, 20, 21, 22, 23, 24);
         const ROWS: usize = 5;
         const COLS: usize = 5;
-        let blue_player = Colorize::blue("B");
-        let red_player = Colorize::red("R");
-        let bobail = Colorize::yellow("Y");
-        let mut board: [ColoredString; ROWS * COLS] = std::array::from_fn(|_| " ".normal());
+        let blue_player = 1;
+        let red_player = 2;
+        let bobail = 3;
+        let empty = 0;
+        // let mut board: [ColoredString; ROWS * COLS] = std::array::from_fn(|_| self.empty);
+        let mut board: [usize; ROWS * COLS] = [0; ROWS * COLS];
         let actions = DVector::from_vec((0..8).collect());
         let current_player = blue_player.clone();
         let previous_player = blue_player.clone();
         let game_over = false;
-        let winner = "0".normal();
+        let winner = 0;
         let current_score = 0.0;
         let r = vec![-1.0f32, 0.0, 1.0];
         let bobail_move = false;
@@ -71,7 +73,8 @@ impl BobailEnv {
             red_player,
             bobail,
             bobail_move,
-            directions
+            directions,
+            empty
         };
 
         env.init_board();
@@ -112,7 +115,7 @@ impl BobailEnv {
             // Check if the new position is within bounds
             if new_row >= 0 && new_row < self.rows as isize && new_col >= 0 && new_col < self.cols as isize {
                 let index = (new_row as usize) * self.cols + (new_col as usize);
-                if self.board[index] == " ".normal() { // Only move if the spot is empty
+                if self.board[index] == self.empty { // Only move if the spot is empty
                     possible_moves.push(direction);
                 }
             }
@@ -121,7 +124,6 @@ impl BobailEnv {
     }
 
     fn move_piece(&mut self, action: i32) -> (usize, usize) {
-
         let ( mut row, mut col, dir) = Self::get_row_col(action);
         let mut new_row = 0;
         let mut new_col = 0;
@@ -129,7 +131,7 @@ impl BobailEnv {
         // Move as far as possible in the given direction
         let correct_direction = self.directions.iter().find(|&&(dr, dc, direction)| direction == dir as isize);
 
-        for &(dr, dc, name) in &correct_direction {
+        if let Some(&(dr, dc, name)) = &correct_direction {
             if self.bobail_move {
                 new_row = row as isize + dr;
                 new_col = col as isize + dc;
@@ -149,7 +151,7 @@ impl BobailEnv {
                     let index = (next_row as usize) * self.cols + (next_col as usize);
 
                     // Stop if there's an obstacle
-                    if self.board[index] != " ".normal() {
+                    if self.board[index] != self.empty {
                         break;
                     }
 
@@ -161,10 +163,12 @@ impl BobailEnv {
 
             // Check if the new position is within bounds
             let index = (new_row as usize) * self.cols + (new_col as usize);
-            if self.board[index] == " ".normal() {
-                self.board[row * self.rows + col] = " ".normal();
+            if self.board[index] == self.empty {
+                self.board[row * self.rows + col] = self.empty;
                 self.board[new_row as usize * self.rows + new_col as usize] = self.current_player.clone();
             }
+        } else {
+            panic!("Something went wrong");
         }
 
         (new_row as usize, new_col as usize)
@@ -190,35 +194,27 @@ impl Env for BobailEnv {
     fn get_reward(&self, _num: usize) -> f32 { self.r[_num] }
 
     fn state_id(&self) -> Vec<i32> {
-        let mut color_mapping = HashMap::new();
-        color_mapping.insert("B", 1);
-        color_mapping.insert("R", 2);
-        color_mapping.insert("Y", 3);
-        color_mapping.insert(" ", 0);
-
-        self.board
-            .iter()
-            .map(|cell| {
-                let cleaned_color = Self::clean_string(&cell.to_string());
-                println!("cell.to_string() = {:?}", cleaned_color);
-                color_mapping.get(cleaned_color.as_str()).copied().unwrap_or(0)
-            })
-            .collect::<Vec<i32>>()
+        self.board.iter().map(|&x| x as i32).collect()
     }
 
     fn reset(&mut self) {
-        self.board = core::array::from_fn(|_| " ".normal());
+        self.board = core::array::from_fn(|_| self.empty);
         self.init_board();
         self.current_player = self.blue_player.clone();
         self.game_over = false;
-        self.winner = "0".normal();
+        self.winner = self.empty;
         self.bobail_move = false;
     }
 
     fn display(&self) {
         println!("- + - + - + - + -");
         for row in 0..5 {
-            println!("{} | {} | {} | {} | {}", self.board[row * self.cols], self.board[row * self.cols + 1], self.board[row * self.cols + 2], self.board[row * self.cols + 3], self.board[row * self.cols + 4]);
+            println!("{} | {} | {} | {} | {}",
+                     Self::display_helper(self.board[row * self.cols]),
+                     Self::display_helper(self.board[row * self.cols + 1]),
+                     Self::display_helper(self.board[row * self.cols + 2]),
+                     Self::display_helper(self.board[row * self.cols + 3]),
+                     Self::display_helper(self.board[row * self.cols + 4]));
             if row < self.cols { println!("- + - + - + - + -"); }
         }
         println!();
@@ -303,7 +299,7 @@ impl Env for BobailEnv {
     fn score(&self) -> f32 { self.current_score }
 
     fn start_from_random_state(&mut self) {
-        self.board = core::array::from_fn(|_| " ".normal());
+        self.board = core::array::from_fn(|_| self.empty);
         let mut rng = thread_rng();
 
         // Get all board positions except first and last row for bobail
@@ -317,7 +313,7 @@ impl Env for BobailEnv {
         // Get all empty positions
         let mut empty_positions: Vec<usize> = self.board.iter()
             .enumerate()
-            .filter_map(|(idx, c)| if *c == " ".normal() { Some(idx) } else { None })
+            .filter_map(|(idx, c)| if *c == self.empty { Some(idx) } else { None })
             .collect();
 
         empty_positions.shuffle(&mut rng);
@@ -339,7 +335,7 @@ impl Env for BobailEnv {
         self.current_player = self.bobail.clone();
         self.previous_player = self.red_player.clone();
         self.game_over = false;
-        self.winner = "0".normal();
+        self.winner = self.empty;
         self.bobail_move = false;
     }
 
