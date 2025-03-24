@@ -178,6 +178,45 @@ impl BobailEnv {
         let ansi_escape = Regex::new("\x1b\\[[0-9;]*m").unwrap();
         ansi_escape.replace_all(s, "").to_string()
     }
+
+    pub fn get_input_vec(&self) -> Vec<String> {
+        let mut state_bin = vec![];
+        for state in 0..self.board.len()*4 {
+            let binary_str = format!("{:b}", state);
+            state_bin.push(binary_str);
+        }
+
+        state_bin
+    }
+    
+    pub fn get_output_vec(&mut self) -> Vec<i32> {
+        let old_board = self.board.clone();
+        self.board = [0; 25];
+
+        let mut state_vec = vec![];
+
+        for i in 0..self.board.len() {
+            self.board[i] = self.blue_player;
+            for action in self.available_actions() {
+                state_vec.push(action);
+            }
+            self.board[i] = self.empty;
+        }
+
+        self.board = old_board;
+        state_vec
+    }
+
+    fn display_helper(num: usize) -> ColoredString {
+        let res = match num {
+            1 => Colorize::blue("B"),
+            2 => Colorize::red("R"),
+            3 => Colorize::yellow("Y"),
+            _ => Colorize::normal(" "),
+        };
+
+        res
+    }
 }
 
 impl Env for BobailEnv {
