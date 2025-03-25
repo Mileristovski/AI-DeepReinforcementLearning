@@ -7,7 +7,7 @@ use crate::environments::bobail::BobailEnv;
 use crate::services::testing::common::reset_screen;
 use std::time::Instant;
 
-pub fn testing_env_manually<E: Env>(env: &mut E, env_name: &str, from_random: bool) {
+pub fn testing_env_manually_solo<E: Env>(env: &mut E, env_name: &str, from_random: bool) {
     if from_random { env.start_from_random_state() };
 
     let mut stdout = io::stdout();
@@ -54,7 +54,7 @@ pub fn testing_env_manually<E: Env>(env: &mut E, env_name: &str, from_random: bo
     env.reset();
 }
 
-pub fn testing_env_manually_random(env: &mut BobailEnv, env_name: &str, from_random: bool) {
+pub fn testing_env_manually_random_1_v_1(env: &mut BobailEnv, env_name: &str, from_random: bool) {
     if from_random { env.start_from_random_state() };
 
     let mut stdout = io::stdout();
@@ -111,6 +111,9 @@ pub fn testing_env_manually_random(env: &mut BobailEnv, env_name: &str, from_ran
 }
 
 pub fn benchmark_random_agents(env: &mut BobailEnv, env_name: &str, from_random: bool) {
+    let mut stdout = io::stdout();
+    reset_screen(&mut stdout, env_name);
+
     let mut time = 50;
     let mut input = String::new();
     println!("Enter the number of games to simulate:");

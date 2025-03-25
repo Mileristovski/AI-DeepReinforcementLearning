@@ -1,11 +1,10 @@
-mod algorithms;
-mod environments;
+// mod algorithms;
+pub mod environments;
 mod services;
-mod gui;
+// mod gui;
 
 use crossterm::terminal::disable_raw_mode;
-use crate::services::testing::envs::testing_env_manually;
-use crate::services::testing::envs::testing_env_manually_random;
+use crate::services::testing::envs::{testing_env_manually_random_1_v_1, testing_env_manually_solo};
 use crate::services::testing::envs::benchmark_random_agents;
 use crate::services::testing::common::{clear_screen, end_of_run, user_choice};
 
@@ -30,11 +29,11 @@ fn main() {
 
         match selected_index {
             0 => { from_random = !from_random; }
-            1 => { testing_env_manually(&mut environments::line_world::LineEnv::new(), options[selected_index], from_random); },
-            2 => { testing_env_manually(&mut environments::grid_world::GridEnv::new(), options[selected_index], from_random); },
-            3 => { testing_env_manually(&mut environments::tic_tac_toe::TicTacToeEnv::new(), options[selected_index], from_random); },
-            4 => { testing_env_manually(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
-            5 => { testing_env_manually_random(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
+            1 => { testing_env_manually_solo(&mut environments::line_world::LineEnv::new(), options[selected_index], from_random); },
+            2 => { testing_env_manually_solo(&mut environments::grid_world::GridEnv::new(), options[selected_index], from_random); },
+            3 => { testing_env_manually_solo(&mut environments::tic_tac_toe::TicTacToeEnv::new(), options[selected_index], from_random); },
+            4 => { testing_env_manually_solo(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
+            5 => { testing_env_manually_random_1_v_1(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
             6 => { benchmark_random_agents(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
             7 => { break; }
             _ => {}

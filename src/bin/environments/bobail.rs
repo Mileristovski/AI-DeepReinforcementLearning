@@ -119,20 +119,21 @@ impl BobailEnv {
     }
 
     fn move_piece(&mut self, action: i32) -> (usize, usize) {
-        let ( mut row, mut col, dir) = Self::get_row_col(action);
+        let ( row, col, dir) = Self::get_row_col(action);
         let mut new_row = 0;
         let mut new_col = 0;
 
         // Move as far as possible in the given direction
-        let correct_direction = self.directions.iter().find(|&&(dr, dc, direction)| direction == dir as isize);
+        let correct_direction = self.directions.iter().find(|&&(_, _, direction)| direction == dir as isize);
 
-        if let Some(&(dr, dc, name)) = &correct_direction {
+        if let Some(&(dr, dc, _)) = &correct_direction {
             if self.bobail_move {
                 new_row = row as isize + dr;
                 new_col = col as isize + dc;
             } else {
                 new_row = row as isize;
                 new_col = col as isize;
+
                 // Move as far as possible in the given direction
                 loop {
                     let next_row = new_row + dr;
@@ -174,13 +175,11 @@ impl BobailEnv {
         ansi_escape.replace_all(s, "").to_string()
     }
 
-    pub fn get_input_vec(&self) -> Vec<String> {
+    pub fn get_input_vec(&self) -> Vec<u8> {
         let mut state_bin = vec![];
-        for state in 0..self.board.len()*4 {
-            let binary_str = format!("{:b}", state);
-            state_bin.push(binary_str);
+        for state in 0..self.board.len() * 4 {
+            state_bin.push(state as u8);
         }
-
         state_bin
     }
     
@@ -217,7 +216,7 @@ impl BobailEnv {
 impl Env for BobailEnv {
     fn num_states(&self) -> usize { self.board.len() }
 
-    fn num_actions(&self) -> usize { self.get_input_vec().len() }
+    fn num_actions(&self) -> usize { 144 }
 
     fn num_rewards(&self) -> usize { self.r.len() }
 
@@ -276,9 +275,9 @@ impl Env for BobailEnv {
             .collect();
 
         for &elem in indexes.iter() {
-            let mut row = (elem / self.rows) as i32;
-            let mut col = (elem % self.cols) as i32;
-            let mut all_moves = Self::get_possible_moves(&self, row as usize, col as usize);
+            let row = (elem / self.rows) as i32;
+            let col = (elem % self.cols) as i32;
+            let all_moves = Self::get_possible_moves(&self, row as usize, col as usize);
             for action in all_moves.iter() {
                 available_action.push((row+1)*100 + (col+1)*10 + *action as i32);
             }

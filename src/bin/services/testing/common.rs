@@ -1,7 +1,6 @@
 use std::io;
 use std::io::Stdout;
 use std::process::Command;
-use crossterm::event::{read, Event, KeyCode};
 use crossterm::execute;
 use crossterm::terminal::{Clear, ClearType};
 
@@ -33,38 +32,27 @@ pub fn clear_screen() {
 }
 
 pub fn user_choice(options: Vec<&str>) -> usize {
+    use std::io::{self, Write};
     let mut stdout = io::stdout();
-    let mut selected_index = 0;
-    loop {
-        reset_screen(&mut stdout, "Use Arrow Keys to Navigate, Enter to Select: \n");
-        // Display menu options
-        for (i, option) in options.iter().enumerate() {
-            if i == selected_index {
-                println!("> {}", option);
-            } else {
-                println!("  {}", option);
-            }
-        }
+    let mut selected_index = String::new();
 
-        let event = read().unwrap();
-        if event == Event::Key(KeyCode::Up.into()) {
-            if selected_index > 0 {
-                selected_index -= 1;
-            } else if selected_index == 0 {
-                selected_index = options.len() - 1
-            }
+    reset_screen(&mut stdout, "Type the number of your selection, Enter to Select: \n");
 
-        } else if event == Event::Key(KeyCode::Down.into()) {
-            if selected_index < options.len() - 1 {
-                selected_index += 1;
-            } else if selected_index == options.len() - 1 {
-                selected_index = 0;
-            }
+    println!("Select an option:");
+    for (i, option) in options.iter().enumerate() {
+        println!("{}: {}", i + 1, option);
+    }
 
-        } else if event == Event::Key(KeyCode::Enter.into()) {
-            return selected_index;
-        } else if event == Event::Key(KeyCode::Esc.into()) {
-            return selected_index;
+    print!("Enter your choice: ");
+    io::stdout().flush().unwrap();
+
+    io::stdin().read_line(&mut selected_index).expect("Failed to read input");
+
+    match selected_index.trim().parse::<usize>() {
+        Ok(num) if num > 0 && num <= options.len() => num - 1,
+        _ => {
+            println!("Invalid input, defaulting to option 1.");
+            0
         }
     }
 }
