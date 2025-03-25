@@ -1,0 +1,5 @@
+pub mod tabular_q_learning;
+pub mod deep_q_learning;
+pub mod double_deep_q_learning;
+pub mod double_deep_q_learning_with_experience_replay;
+pub mod double_deep_q_learning_with_prioritized_experience_replay;

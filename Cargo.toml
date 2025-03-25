@@ -1,0 +1,20 @@
+[package]
+name = "DRL"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nalgebra = "0.33.0"
+rand = "0.8.0"
+crossterm = { version = "0.28", features = ["use-dev-tty"] }
+colored = "2.0"
+regex = "1.11.1"
+
+
+[[bin]]
+name = "main"
+path = "src/bin/main.rs"
+
+[[bin]]
+name = "debug"
+path = "src/bin/debug.rs"
