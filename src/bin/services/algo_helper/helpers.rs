@@ -39,6 +39,16 @@ pub fn epsilon_greedy_action<B: Backend<FloatElem=f32, IntElem=i64>, const NUM_S
     }
 }
 
+pub fn get_device() -> burn::backend::libtorch::LibTorchDevice {
+    let args: Vec<String> = std::env::args().collect();
+    let use_gpu = args.iter().any(|arg| arg == "--gpu");
+
+    if tch::Cuda::is_available() && use_gpu {
+        burn::backend::libtorch::LibTorchDevice::Cuda(0)
+    } else {
+        burn::backend::libtorch::LibTorchDevice::Cpu
+    }
+}
 /*
 pub fn epsilon_greedy_action(
     aa: DVector<i32>,          // Available actions
