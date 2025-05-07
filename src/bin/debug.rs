@@ -1,5 +1,7 @@
 mod services;
 mod environments;
+mod algorithms;
+mod config;
 
 use crate::environments::env::Env;
 
