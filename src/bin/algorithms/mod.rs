@@ -6,3 +6,4 @@ pub mod monte_carlo_tree_search;
 pub mod expert_apprentice;
 pub mod alpha_zero;
 pub mod mu_zero;
+pub mod sarsa;

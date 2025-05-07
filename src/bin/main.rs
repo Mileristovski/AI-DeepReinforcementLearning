@@ -1,16 +1,17 @@
-// mod algorithms;
-pub mod environments;
+mod algorithms;
+mod environments;
 mod services;
-// mod gui;
+mod gui;
+mod config;
 
+use crate::services::envs::envs::benchmark_random_agents;
+use crate::services::envs::common::{clear_screen, end_of_run, user_choice};
+use crate::services::envs::envs::{run_env_manually_random_1_v_1, run_env_manually_solo, run_deep_learning};
 use crossterm::terminal::disable_raw_mode;
-use crate::services::testing::envs::{testing_env_manually_random_1_v_1, testing_env_manually_solo};
-use crate::services::testing::envs::benchmark_random_agents;
-use crate::services::testing::common::{clear_screen, end_of_run, user_choice};
+use environments::tic_tac_toe::tic_tac_toe::{TicTacToeVersusRandom, NUM_ACTIONS, NUM_STATE_FEATURES};
 
 fn main() {
     let mut from_random = false;
-    let mut selected_index = 0;
 
     loop {
         let options = vec![
@@ -24,16 +25,16 @@ fn main() {
             "Quit"
         ];
 
-        selected_index = user_choice(options.clone());
+        let selected_index = user_choice(options.clone());
         clear_screen();
 
         match selected_index {
             0 => { from_random = !from_random; }
-            1 => { testing_env_manually_solo(&mut environments::line_world::LineEnv::new(), options[selected_index], from_random); },
-            2 => { testing_env_manually_solo(&mut environments::grid_world::GridEnv::new(), options[selected_index], from_random); },
-            3 => { testing_env_manually_solo(&mut environments::tic_tac_toe::TicTacToeEnv::new(), options[selected_index], from_random); },
-            4 => { testing_env_manually_solo(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
-            5 => { testing_env_manually_random_1_v_1(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
+            1 => { run_env_manually_solo(&mut environments::line_world::LineEnv::new(), options[selected_index], from_random); },
+            2 => { run_env_manually_solo(&mut environments::grid_world::GridEnv::new(), options[selected_index], from_random); },
+            3 => { run_deep_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, TicTacToeVersusRandom>(); },
+            4 => { run_env_manually_solo(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
+            5 => { run_env_manually_random_1_v_1(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
             6 => { benchmark_random_agents(&mut environments::bobail::BobailEnv::new(), options[selected_index], from_random); },
             7 => { break; }
             _ => {}
