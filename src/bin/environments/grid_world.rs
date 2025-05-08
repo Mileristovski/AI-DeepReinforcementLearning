@@ -44,14 +44,21 @@ impl DeepDiscreteActionsEnv<GRID_NUM_STATE_FEATURES, GRID_NUM_ACTIONS> for GridW
         })
     }
 
-    fn available_actions_ids(&self) -> impl Iterator<Item=usize> { [0, 1, 2, 3].into_iter() }
+    fn available_actions_ids(&self) -> impl Iterator<Item=usize> {
+        (0..GRID_NUM_ACTIONS).filter_map(|action| {
+            let row = self.current_state / NUM_COLS;
+            if (row == 0 && action == 0) || (row == NUM_COLS-1 && action == 1){
+                None
+            } else {
+                Some(action)
+            }
+        })
+    }
 
     fn action_mask(&self) -> [f32; GRID_NUM_ACTIONS] {
         std::array::from_fn(|idx| {
-            let row = self.current_state % NUM_COLS;
-            if row == 0 && idx == 0{
-                0.0
-            } else if row == NUM_COLS-1 && idx == 1 {
+            let row = self.current_state / NUM_COLS;
+            if (row == 0 && idx == 0) || (row == NUM_COLS-1 && idx == 1) {
                 0.0
             } else {
                 1.0
@@ -73,16 +80,16 @@ impl DeepDiscreteActionsEnv<GRID_NUM_STATE_FEATURES, GRID_NUM_ACTIONS> for GridW
         // Update board
         match action {
             0 => { // Up
-                row += 1;
-            }
-            1 => { // Down
                 row -= 1;
             }
+            1 => { // Down
+                row += 1;
+            }
             2 => { // Left
-                col += 1;
+                col -= 1;
             }
             3 => { // Right 
-                col -= 1;
+                col += 1;
             }
             _ => panic!("Invalid action")
         }
