@@ -4,15 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-nalgebra = "0.33.0"
 rand = "0.8.5"
 crossterm = { version = "0.28", features = ["use-dev-tty"] }
 colored = "2.0"
 regex = "1.11.1"
 rand_xoshiro = "0.6.0"
-burn = { version = "0.17.0", features = ["wgpu", "autodiff", "ndarray", "cuda", "tch"] }
-tch = { version = "0.19.0", features = ["download-libtorch"] }
-kdam = "0.5.2"
+burn = { version = "0.17.0", features = ["autodiff", "tch"] }
+tch = { version = "0.20.0", features = ["download-libtorch"] }
+kdam = "0.6.2"
 
 
 [[bin]]
