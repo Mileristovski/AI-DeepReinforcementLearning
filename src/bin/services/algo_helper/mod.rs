@@ -1,2 +1,2 @@
-pub mod qmlp_config;
+pub mod qmlp;
 pub mod helpers;

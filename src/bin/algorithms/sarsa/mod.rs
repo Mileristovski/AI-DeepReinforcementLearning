@@ -9,7 +9,7 @@ use kdam::tqdm;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algo_helper::helpers::epsilon_greedy_action;
-use crate::services::algo_helper::qmlp_config::Forward;
+use crate::services::algo_helper::qmlp::Forward;
 
 pub fn episodic_semi_gradient_sarsa<
     const NUM_STATE_FEATURES: usize,

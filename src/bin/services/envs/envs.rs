@@ -4,7 +4,7 @@ use crate::services::envs::common::reset_screen;
 use crate::services::algo_helper::helpers::{epsilon_greedy_action, get_device};
 use crate::algorithms::sarsa::episodic_semi_gradient_sarsa;
 use crate::config::*;
-use crate::services::algo_helper::qmlp_config::{Forward, MyQmlp};
+use crate::services::algo_helper::qmlp::{Forward, MyQmlp};
 use std::fmt::Display;
 use std::io;
 use std::thread::sleep;
@@ -194,6 +194,7 @@ pub fn run_deep_learning<
     let minus_one: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([-1.0; NUM_ACTIONS], &device);
     let plus_one: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([ 1.0; NUM_ACTIONS], &device);
     let fmin_vec: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
+    let parameters = DeepLearningParams::default();
 
     // Train the model
     let model =
@@ -205,11 +206,11 @@ pub fn run_deep_learning<
             Env
         >(
             model,
-            50_000,
-            0.999f32,
-            3e-3,
-            1.0f32,
-            1e-5f32,
+            parameters.num_episodes,
+            parameters.gamma,
+            parameters.alpha,
+            parameters.start_epsilon,
+            parameters.final_epsilon,
             &minus_one,
             &plus_one,
             &fmin_vec,
