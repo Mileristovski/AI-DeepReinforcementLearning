@@ -2,14 +2,13 @@ use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use rand::Rng;
 
-pub const NUM_ACTIONS: usize = 2;
+pub const LINE_NUM_ACTIONS: usize = 2;
 pub const NUM_BOARD_SIZE: usize = 5;
-pub const NUM_STATE_FEATURES: usize = NUM_BOARD_SIZE*2;
+pub const LINE_NUM_STATE_FEATURES: usize = NUM_BOARD_SIZE*2;
 
 #[derive(Clone)]
 pub struct LineWorld {
     pub board: [f32; NUM_BOARD_SIZE],
-    pub player: u8,
     pub score: f32,
     pub is_game_over: bool,
     pub current_state: usize,
@@ -23,7 +22,6 @@ impl Default for LineWorld {
 
         Self {
             board,
-            player: 0,
             score: 0.0,
             is_game_over: false,
             current_state: NUM_BOARD_SIZE/2,
@@ -32,8 +30,8 @@ impl Default for LineWorld {
     }
 }
 
-impl DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> for LineWorld {
-    fn state_description(&self) -> [f32; NUM_STATE_FEATURES] {
+impl DeepDiscreteActionsEnv<LINE_NUM_STATE_FEATURES, LINE_NUM_ACTIONS> for LineWorld {
+    fn state_description(&self) -> [f32; LINE_NUM_STATE_FEATURES] {
         std::array::from_fn(|idx| {
             let cell = idx / 2;
             let feature = idx % 2;
@@ -47,14 +45,14 @@ impl DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> for LineWorld {
 
     fn available_actions_ids(&self) -> impl Iterator<Item=usize> { [0, 1].into_iter() }
 
-    fn action_mask(&self) -> [f32; NUM_ACTIONS] { [1.0f32; NUM_ACTIONS] }
+    fn action_mask(&self) -> [f32; LINE_NUM_ACTIONS] { [1.0f32; LINE_NUM_ACTIONS] }
 
     fn step(&mut self, action: usize) {
         if self.is_game_over {
             panic!("Trying to play while Game is Over");
         }
 
-        if action > 1 {
+        if action >= LINE_NUM_ACTIONS {
             panic!("Invalid action : {}", action);
         }
 
@@ -85,7 +83,6 @@ impl DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> for LineWorld {
     fn reset(&mut self) {
         self.board = [0f32; NUM_BOARD_SIZE];
         self.board[NUM_BOARD_SIZE/2] = 1.0;
-        self.player =  0;
         self.score =  0.0;
         self.is_game_over =  false;
         self.current_state = if self.is_random_state { 
@@ -107,7 +104,6 @@ impl Display for LineWorld {
         }
         f.write_str("\n")?;
         writeln!(f, "Score: {}", self.score)?;
-        writeln!(f, "Player {} to play", self.player)?;
         writeln!(f, "Game Over: {}", self.is_game_over)?;
         Ok(())
     }

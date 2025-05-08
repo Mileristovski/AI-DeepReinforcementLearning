@@ -1,11 +1,10 @@
-use crate::environments::env::Env;
+use crate::environments::env::{Env, DeepDiscreteActionsEnv};
 use crate::environments::bobail::BobailEnv;
 use crate::services::envs::common::reset_screen;
-use crate::services::algo_helper::helpers::epsilon_greedy_action;
+use crate::services::algo_helper::helpers::{epsilon_greedy_action, get_device};
 use crate::algorithms::sarsa::episodic_semi_gradient_sarsa;
-use crate::environments::env::{DeepDiscreteActionsEnv, Forward};
 use crate::config::*;
-use crate::services::algo_helper::perceptron::{get_device, MyQmlp};
+use crate::services::algo_helper::qmlp_config::{Forward, MyQmlp};
 use std::fmt::Display;
 use std::io;
 use std::thread::sleep;
@@ -14,21 +13,27 @@ use rand::Rng;
 use std::time::Instant;
 use burn::module::AutodiffModule;
 use burn::prelude::*;
+use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
-pub fn run_env_manually_solo<E: Env>(env: &mut E, env_name: &str, from_random: bool) {
-    if from_random { env.start_from_random_state() };
+pub fn run_env_manually_solo<
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display
+>(env: &mut Env, env_name: &str /*from_random: bool*/) {
+    // if from_random {
+    //     env.is_random_state = true;
+    // };
 
     let mut stdout = io::stdout();
     while !env.is_game_over() {
         reset_screen(&mut stdout, env_name);
 
-        env.display();
+        println!("{}", env);
         println!("Score: {}", env.score());
 
-        let available_actions: Vec<_> = env.available_actions().iter().cloned().collect();
-        println!("Available actions: {:?}", available_actions);
+        println!("Available actions: {:?}", env.available_actions_ids().collect::<Vec<_>>());
         println!("Enter your action (or type 'quit' to exit): ");
 
         let mut input = String::new();
@@ -42,14 +47,9 @@ pub fn run_env_manually_solo<E: Env>(env: &mut E, env_name: &str, from_random: b
             break;
         }
 
-        match input.parse::<i32>() {
+        match input.parse::<usize>() {
             Ok(action) => {
-                if available_actions.contains(&action) {
-                    env.step(action);
-                } else {
-                    println!("Invalid action: {}", action);
-                    sleep(Duration::from_secs(1));
-                }
+                env.step(action);
             }
             Err(_) => {
                 println!("Please enter a valid number or 'quit' to exit.");
@@ -64,7 +64,11 @@ pub fn run_env_manually_solo<E: Env>(env: &mut E, env_name: &str, from_random: b
     env.reset();
 }
 
-pub fn benchmark_random_agents(env: &mut BobailEnv, env_name: &str, from_random: bool) {
+pub fn benchmark_random_agents<    
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display
+>(env: &mut Env, env_name: &str/*, from_random: bool*/) {
     let mut stdout = io::stdout();
     reset_screen(&mut stdout, env_name);
 
@@ -85,23 +89,18 @@ pub fn benchmark_random_agents(env: &mut BobailEnv, env_name: &str, from_random:
         io::stdin().read_line(&mut input).expect("Failed to read input");
         time = input.trim().parse().unwrap_or(50);
     }
-    let mut rng = rand::thread_rng();
     let start = Instant::now();
     let mut games_played = 0;
+    let mut rng = rand::thread_rng();
     for _ in 0..num_games {
-        if from_random { env.start_from_random_state() } else { env.reset()};
+        // if from_random { env.start_from_random_state() } else { env.reset()};
 
         while !env.is_game_over() {
-            let available_actions: Vec<_> = env.available_actions();//.iter().cloned().collect();
-            if available_actions.is_empty() {
-                break;
-            }
-            let index = rng.gen_range(0..available_actions.len());
-            let action = available_actions[index];
+            let action = env.available_actions_ids().choose(&mut rng).unwrap();
             env.step(action);
             if visual {
                 let mut stdout = io::stdout();
-                env.display();
+                println!("{}", env);
                 sleep(Duration::from_millis(time));
                 reset_screen(&mut stdout, env_name);
             }
@@ -234,7 +233,7 @@ pub fn run_deep_learning<
             let mask_tensor: Tensor<MyBackend, 1> = Tensor::from(mask).to_device(&device);
             let q_s = model.valid().forward(s_tensor);
 
-            let a = epsilon_greedy_action::<MyBackend, NUM_STATE_FEATURES, NUM_ACTIONS>(&q_s, &mask_tensor, &minus_one,  &plus_one,  &fmin_vec, env.available_actions_ids(), 1e-5f32, &mut rng, );
+            let a = epsilon_greedy_action::<MyBackend, NUM_STATE_FEATURES, NUM_ACTIONS>(&q_s, &mask_tensor, &minus_one,  &plus_one,  &fmin_vec, env.available_actions_ids(), 1e-5f32, &mut rng);
             env.step(a);
         }
         println!("{}", env);

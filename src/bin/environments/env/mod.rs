@@ -1,5 +1,3 @@
-use burn::prelude::{Backend, Tensor};
-
 pub trait Env {
         fn num_states(&self) -> usize;
         fn num_actions(&self) -> usize;
@@ -18,11 +16,6 @@ pub trait Env {
         fn start_from_random_state(&mut self);
         fn transition_probability(&self, s: usize, a: usize, s_p: usize, r_index: usize) -> f32;
     }
-
- pub trait Forward {
-         type B: Backend;
-         fn forward<const DIM: usize>(&self, input: Tensor<Self::B, DIM>) -> Tensor<Self::B, DIM>;
- }
 
  pub trait DeepDiscreteActionsEnv<const NUM_STATES_FEATURES: usize, const NUM_ACTIONS: usize>: Default + Clone {
          fn state_description(&self) -> [f32; NUM_STATES_FEATURES];
