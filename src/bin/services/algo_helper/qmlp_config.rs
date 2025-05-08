@@ -17,11 +17,11 @@ pub struct MyQmlp<B: Backend> {
 
 impl<B: Backend> MyQmlp<B> {
     pub(crate) fn new(device: &B::Device, in_features: usize, out_actions: usize) -> Self {
-        let linear1 = nn::LinearConfig::new(in_features, 64).with_bias(true).init(device);
-        let linear2 = nn::LinearConfig::new(64, 32).with_bias(true).init(device);
-        let linear3 = nn::LinearConfig::new(32, 16).with_bias(true).init(device);
-        let linear4 = nn::LinearConfig::new(16, 16).with_bias(true).init(device);
-        let output  = nn::LinearConfig::new(16, out_actions).with_bias(true).init(device);
+        let linear1 = nn::LinearConfig::new(in_features, 2048).with_bias(true).init(device);
+        let linear2 = nn::LinearConfig::new(2048, 1024).with_bias(true).init(device);
+        let linear3 = nn::LinearConfig::new(1024, 512).with_bias(true).init(device);
+        let linear4 = nn::LinearConfig::new(512, 256).with_bias(true).init(device);
+        let output  = nn::LinearConfig::new(256, out_actions).with_bias(true).init(device);
         Self { linear1, linear2, linear3, linear4, output }
     }
 }
