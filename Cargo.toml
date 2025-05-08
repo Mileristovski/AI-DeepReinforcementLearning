@@ -10,7 +10,7 @@ colored = "2.0"
 regex = "1.11.1"
 rand_xoshiro = "0.6.0"
 burn = { version = "0.17.0", features = ["autodiff", "tch"] }
-tch = { version = "0.20.0", features = ["download-libtorch"] }
+tch = { version = "0.19.0", features = ["download-libtorch"] }
 kdam = "0.6.2"
 
 
