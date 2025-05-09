@@ -57,6 +57,8 @@ impl DeepDiscreteActionsEnv<GRID_NUM_STATE_FEATURES, GRID_NUM_ACTIONS> for GridW
         })
     }
 
+    fn available_actions(&self) -> impl Iterator<Item=usize> { self.available_actions_ids() }
+
     fn action_mask(&self) -> [f32; GRID_NUM_ACTIONS] {
         std::array::from_fn(|idx| {
             let row = self.current_state / NUM_COLS;
@@ -110,6 +112,8 @@ impl DeepDiscreteActionsEnv<GRID_NUM_STATE_FEATURES, GRID_NUM_ACTIONS> for GridW
         }
     }
 
+    fn step_from_idx(&mut self, action_idx: usize) { self.step(action_idx) }
+
     fn is_game_over(&self) -> bool { self.is_game_over }
 
     fn score(&self) -> f32 { self.score }
@@ -126,7 +130,10 @@ impl DeepDiscreteActionsEnv<GRID_NUM_STATE_FEATURES, GRID_NUM_ACTIONS> for GridW
 
     fn set_from_random_state(&mut self) { self.is_random_state = !self.is_random_state }
 
-    fn set_against_random(&mut self) { self.against_random = !self.against_random }
+    fn set_against_random(&mut self) -> bool {
+        self.against_random = !self.against_random;
+        self.against_random
+    }
     
 }
 
@@ -146,7 +153,7 @@ impl Display for GridWorld {
         }
         f.write_str("\n")?;
         writeln!(f, "Score: {}", self.score)?;
-        writeln!(f,"Available actions: {:?}",self.available_actions_ids().collect::<Vec<_>>())?;
+        writeln!(f,"Available actions: {:?}",self.available_actions().collect::<Vec<_>>())?;
         writeln!(f, "Game Over: {}", self.is_game_over)?;
         Ok(())
     }

@@ -51,6 +51,8 @@ impl DeepDiscreteActionsEnv<TTT_NUM_STATE_FEATURES, TTT_NUM_ACTIONS> for TicTacT
         })
     }
 
+    fn available_actions(&self) -> impl Iterator<Item=usize> { self.available_actions_ids() }
+
     fn action_mask(&self) -> [f32; 9] {
         std::array::from_fn(|idx| {
             if self.board[idx] == 0.0 {
@@ -117,6 +119,8 @@ impl DeepDiscreteActionsEnv<TTT_NUM_STATE_FEATURES, TTT_NUM_ACTIONS> for TicTacT
         }
     }
 
+    fn step_from_idx(&mut self, action_idx: usize) { self.step(action_idx) }
+
     fn is_game_over(&self) -> bool {
         self.is_game_over
     }
@@ -134,7 +138,10 @@ impl DeepDiscreteActionsEnv<TTT_NUM_STATE_FEATURES, TTT_NUM_ACTIONS> for TicTacT
 
     fn set_from_random_state(&mut self) { self.is_random_state = !self.is_random_state }
 
-    fn set_against_random(&mut self) { self.against_random = !self.against_random }
+    fn set_against_random(&mut self) -> bool {
+        self.against_random = !self.against_random;
+        self.against_random
+    }
 }
 
 impl Display for TicTacToeVersusRandom {
@@ -153,7 +160,7 @@ impl Display for TicTacToeVersusRandom {
         }
         writeln!(f, "Score: {}", self.score)?;
         writeln!(f, "Player {} to play", self.player)?;
-        writeln!(f,"Available actions: {:?}",self.available_actions_ids().collect::<Vec<_>>())?;
+        writeln!(f,"Available actions: {:?}",self.available_actions().collect::<Vec<_>>())?;
         writeln!(f, "Game Over: {}", self.is_game_over)?;
         Ok(())
     }

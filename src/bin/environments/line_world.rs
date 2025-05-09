@@ -47,6 +47,8 @@ impl DeepDiscreteActionsEnv<LINE_NUM_STATE_FEATURES, LINE_NUM_ACTIONS> for LineW
 
     fn available_actions_ids(&self) -> impl Iterator<Item=usize> { [0, 1].into_iter() }
 
+    fn available_actions(&self) -> impl Iterator<Item=usize> { self.available_actions_ids() }
+
     fn action_mask(&self) -> [f32; LINE_NUM_ACTIONS] { [1.0f32; LINE_NUM_ACTIONS] }
 
     fn step(&mut self, action: usize) {
@@ -78,6 +80,8 @@ impl DeepDiscreteActionsEnv<LINE_NUM_STATE_FEATURES, LINE_NUM_ACTIONS> for LineW
         }
     }
 
+    fn step_from_idx(&mut self, action_idx: usize) { self.step(action_idx) }
+
     fn is_game_over(&self) -> bool { self.is_game_over }
 
     fn score(&self) -> f32 { self.score }
@@ -96,7 +100,10 @@ impl DeepDiscreteActionsEnv<LINE_NUM_STATE_FEATURES, LINE_NUM_ACTIONS> for LineW
 
     fn set_from_random_state(&mut self) { self.is_random_state = !self.is_random_state }
     
-    fn set_against_random(&mut self) { self.against_random = !self.against_random }
+    fn set_against_random(&mut self) -> bool { 
+        self.against_random = !self.against_random;
+        self.against_random
+    }
 }
 
 impl Display for LineWorld {
@@ -110,7 +117,7 @@ impl Display for LineWorld {
         }
         f.write_str("\n")?;
         writeln!(f, "Score: {}", self.score)?;
-        writeln!(f,"Available actions: {:?}",self.available_actions_ids().collect::<Vec<_>>())?;
+        writeln!(f,"Available actions: {:?}",self.available_actions().collect::<Vec<_>>())?;
         writeln!(f, "Game Over: {}", self.is_game_over)?;
         Ok(())
     }
