@@ -25,4 +25,6 @@ pub trait Env {
          fn is_game_over(&self) -> bool;
          fn score(&self) -> f32;
          fn reset(&mut self);
+         fn set_from_random_state(&mut self);
+         fn set_against_random(&mut self);
  }
