@@ -23,6 +23,7 @@ pub fn episodic_semi_gradient_sarsa<
 >(
     mut model: M,
     num_episodes: usize,
+    episode_stop:usize,
     gamma: f32,
     alpha: f32,
     start_epsilon: f32,
@@ -48,8 +49,8 @@ where
         let progress = ep_id as f32 / num_episodes as f32;
         let decayed_epsilon = (1.0 - progress) * start_epsilon + progress * final_epsilon;
 
-        if ep_id % 1000 == 0 {
-            println!("Mean Score: {}", total_score / 1000.0);
+        if ep_id % episode_stop == 0 {
+            println!("Mean Score: {}", total_score / episode_stop as f32);
             total_score = 0.0;
         }
         env.reset();
@@ -120,7 +121,7 @@ where
         }
         total_score += env.score();
     }
-
+    println!("Mean Score: {}", total_score / episode_stop as f32);
     model
 }
 
@@ -157,6 +158,7 @@ pub fn run_episodic_semi_gradient_sarsa<
         >(
             model,
             parameters.num_episodes,
+            parameters.episode_stop,
             parameters.gamma,
             parameters.alpha,
             parameters.start_epsilon,

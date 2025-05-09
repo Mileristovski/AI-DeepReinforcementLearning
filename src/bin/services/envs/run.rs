@@ -1,5 +1,5 @@
 use crate::environments::env::DeepDiscreteActionsEnv;
-use crate::gui::cli::common::reset_screen;
+use crate::gui::cli::common::{end_of_run, reset_screen};
 use std::fmt::Display;
 use std::io;
 use std::thread::sleep;
@@ -55,6 +55,7 @@ pub fn run_env_heuristic<
     println!("Game Over!");
     println!("Score: {}", env.score());
     env.reset();
+    end_of_run();
 }
 
 pub fn run_benchmark_random_agents<
@@ -115,4 +116,5 @@ pub fn run_benchmark_random_agents<
         total_score,
         games_per_second
     );
+    end_of_run();
 }

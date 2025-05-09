@@ -3,6 +3,7 @@ use rand::prelude::IteratorRandom;
 use std::fmt::Display;
 
 pub const TTT_NUM_STATE_FEATURES: usize = 27;
+pub const TTT_NUM_STATES: usize = 3_usize.pow(9);
 pub const TTT_NUM_ACTIONS: usize = 9;
 
 #[derive(Clone)]
@@ -119,8 +120,6 @@ impl DeepDiscreteActionsEnv<TTT_NUM_STATE_FEATURES, TTT_NUM_ACTIONS> for TicTacT
         }
     }
 
-    fn step_from_idx(&mut self, action_idx: usize) { self.step(action_idx) }
-
     fn is_game_over(&self) -> bool {
         self.is_game_over
     }
@@ -141,6 +140,14 @@ impl DeepDiscreteActionsEnv<TTT_NUM_STATE_FEATURES, TTT_NUM_ACTIONS> for TicTacT
     fn set_against_random(&mut self) -> bool {
         self.against_random = !self.against_random;
         self.against_random
+    }
+
+    fn step_from_idx(&mut self, action_idx: usize) { self.step(action_idx) }
+
+    fn state_index(&self) -> usize {
+        self.board.iter().enumerate().fold(0, |acc, (i, &v)| {
+            acc + (v as usize) * 3_usize.pow(i as u32)
+        })
     }
 }
 
