@@ -31,12 +31,12 @@ pub fn clear_screen() {
     }
 }
 
-pub fn user_choice(options: Vec<&str>) -> usize {
+pub fn user_choice(options: Vec<&str>, message: &str) -> usize {
     use std::io::{self, Write};
     let mut stdout = io::stdout();
     let mut selected_index = String::new();
 
-    reset_screen(&mut stdout, "Type the number of your selection, Enter to Select: \n");
+    reset_screen(&mut stdout, &*format!("Type the number of your selection, Enter to Select: \n{}", message));
 
     println!("Select an option:");
     for (i, option) in options.iter().enumerate() {

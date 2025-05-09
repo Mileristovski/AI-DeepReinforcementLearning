@@ -1,5 +1,5 @@
-use crate::environments::env::{Env, DeepDiscreteActionsEnv};
-use crate::services::envs::common::reset_screen;
+use crate::environments::env::DeepDiscreteActionsEnv;
+use crate::gui::cli::common::reset_screen;
 use crate::services::algo_helper::helpers::{epsilon_greedy_action, get_device};
 use crate::algorithms::sarsa::episodic_semi_gradient_sarsa;
 use crate::config::*;
@@ -23,7 +23,7 @@ pub fn run_env_heuristic<
     if from_random {
         env.set_against_random();
     };
-    
+
     let mut stdout = io::stdout();
     while !env.is_game_over() {
         reset_screen(&mut stdout, env_name);
