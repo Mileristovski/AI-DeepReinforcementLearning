@@ -1,5 +1,4 @@
 use crate::environments::env::{Env, DeepDiscreteActionsEnv};
-use crate::environments::bobail::BobailEnv;
 use crate::services::envs::common::reset_screen;
 use crate::services::algo_helper::helpers::{epsilon_greedy_action, get_device};
 use crate::algorithms::sarsa::episodic_semi_gradient_sarsa;
@@ -9,7 +8,6 @@ use std::fmt::Display;
 use std::io;
 use std::thread::sleep;
 use std::time::Duration;
-use rand::Rng;
 use std::time::Instant;
 use burn::module::AutodiffModule;
 use burn::prelude::*;
@@ -17,23 +15,20 @@ use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
-pub fn run_env_manually_solo<
+pub fn run_env_heuristic<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display
->(env: &mut Env, env_name: &str /*from_random: bool*/) {
-    // if from_random {
-    //     env.is_random_state = true;
-    // };
-
+>(env: &mut Env, env_name: &str, from_random: bool) {
+    if from_random {
+        env.set_against_random();
+    };
+    
     let mut stdout = io::stdout();
     while !env.is_game_over() {
         reset_screen(&mut stdout, env_name);
 
         println!("{}", env);
-        println!("Score: {}", env.score());
-
-        println!("Available actions: {:?}", env.available_actions_ids().collect::<Vec<_>>());
         println!("Enter your action (or type 'quit' to exit): ");
 
         let mut input = String::new();
@@ -49,7 +44,13 @@ pub fn run_env_manually_solo<
 
         match input.parse::<usize>() {
             Ok(action) => {
-                env.step(action);
+                if env.available_actions_ids().collect::<Vec<_>>().contains(&action) {
+                    env.step(action);
+                } else {
+                    println!("Please enter a valid action");
+                    let mut s = String::new();
+                    io::stdin().read_line(&mut s).unwrap();
+                }
             }
             Err(_) => {
                 println!("Please enter a valid number or 'quit' to exit.");
@@ -106,6 +107,7 @@ pub fn benchmark_random_agents<
             }
         }
         games_played += 1;
+        env.reset();
     }
 
     let duration = start.elapsed();
@@ -118,62 +120,6 @@ pub fn benchmark_random_agents<
         env.score(),
         games_per_second
     );
-}
-
-pub fn run_env_manually_random_1_v_1(env: &mut BobailEnv, env_name: &str, from_random: bool) {
-    if from_random { env.start_from_random_state() };
-
-    let mut stdout = io::stdout();
-    while !env.is_game_over() {
-        if env.current_player == env.red_player || (env.current_player == env.bobail && env.previous_player == env.blue_player) {
-            let available_actions: Vec<_> = env.available_actions().iter().cloned().collect();
-            let mut rng = rand::thread_rng();
-            let index = rng.gen_range(0..available_actions.len());
-
-            let action = Some(available_actions[index]);
-            env.step(action.unwrap());
-        } else {
-            reset_screen(&mut stdout, env_name);
-
-            env.display();
-            println!("Score: {}", env.score());
-
-            let available_actions: Vec<_> = env.available_actions().iter().cloned().collect();
-            println!("Available actions: {:?}", available_actions);
-            println!("Enter your action (or type 'quit' to exit): ");
-
-            let mut input = String::new();
-            io::stdin()
-                .read_line(&mut input)
-                .expect("Failed to read input");
-
-            let input = input.trim();
-            if input.eq_ignore_ascii_case("quit") {
-                println!("Exiting...");
-                break;
-            }
-
-            match input.parse::<i32>() {
-                Ok(action) => {
-                    if available_actions.contains(&action) {
-                        env.step(action);
-                    } else {
-                        println!("Invalid action: {}", action);
-                        sleep(Duration::from_secs(1));
-                    }
-                }
-                Err(_) => {
-                    println!("Please enter a valid number or 'quit' to exit.");
-                    sleep(Duration::from_secs(1));
-                }
-            }
-        }
-    }
-    reset_screen(&mut stdout, "");
-    println!("-------------------------------------");
-    println!("Game Over!");
-    println!("Score: {}", env.score());
-    env.reset();
 }
 
 pub fn run_deep_learning<
