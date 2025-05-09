@@ -408,6 +408,10 @@ impl DeepDiscreteActionsEnv<BB_NUM_STATE_FEATURES, BB_NUM_ACTIONS> for BobailHeu
         let action = self.actions_lookup[action_idx];
         self.step(action);
     }
+
+    fn state_index(&self) -> usize {
+        panic!("Can't be implemented!")
+    }
 }
 
 impl Display for BobailHeuristic {
