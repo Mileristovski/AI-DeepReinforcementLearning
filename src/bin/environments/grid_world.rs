@@ -84,16 +84,16 @@ impl DeepDiscreteActionsEnv<GRID_NUM_STATE_FEATURES, GRID_NUM_ACTIONS> for GridW
         // Update board
         match action {
             0 => { // Up
-                row -= 1;
+                { if row > 0 { row -= 1; } };
             }
             1 => { // Down
-                row += 1;
+                { if row < NUM_COLS - 1   { row += 1; } };
             }
             2 => { // Left
-                col -= 1;
+                { if col > 0 { col -= 1; } };
             }
             3 => { // Right 
-                col += 1;
+                { if col < NUM_COLS - 1   { col += 1; } };
             }
             _ => panic!("Invalid action")
         }
@@ -134,7 +134,8 @@ impl DeepDiscreteActionsEnv<GRID_NUM_STATE_FEATURES, GRID_NUM_ACTIONS> for GridW
         self.against_random = !self.against_random;
         self.against_random
     }
-    
+
+    fn state_index(&self) -> usize { self.current_state }
 }
 
 impl Display for GridWorld {
