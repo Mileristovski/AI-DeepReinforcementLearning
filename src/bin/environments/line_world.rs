@@ -100,10 +100,12 @@ impl DeepDiscreteActionsEnv<LINE_NUM_STATE_FEATURES, LINE_NUM_ACTIONS> for LineW
 
     fn set_from_random_state(&mut self) { self.is_random_state = !self.is_random_state }
     
-    fn set_against_random(&mut self) -> bool { 
+    fn set_against_random(&mut self) -> bool {
         self.against_random = !self.against_random;
         self.against_random
     }
+
+    fn state_index(&self) -> usize { self.current_state }
 }
 
 impl Display for LineWorld {
