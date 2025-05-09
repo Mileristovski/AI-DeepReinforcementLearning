@@ -26,13 +26,12 @@ pub fn episodic_tabular_q_learning<
 
     for ep in 0..num_episodes {
         let progress = ep as f32 / num_episodes as f32;
-        let ε = (1.0 - progress) * start_epsilon + progress * final_epsilon;
+        let eps = (1.0 - progress) * start_epsilon + progress * final_epsilon;
 
         env.reset();
         let mut s = env.state_index();
 
-        // Choose initial action ε‑greedy
-        let mut a = if rand::random::<f32>() < ε {
+        let mut a = if rand::random::<f32>() < eps {
             env.available_actions_ids().choose(&mut rng).unwrap()
         } else {
             // greedy over available
@@ -52,8 +51,7 @@ pub fn episodic_tabular_q_learning<
             let r = env.score() - prev_score;
             let s2 = env.state_index();
 
-            // choose next action ε‑greedy
-            let a2 = if rand::random::<f32>() < ε {
+            let a2 = if rand::random::<f32>() < eps {
                 env.available_actions_ids().choose(&mut rng).unwrap()
             } else {
                 env.available_actions_ids()
