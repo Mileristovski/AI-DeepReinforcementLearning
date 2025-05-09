@@ -4,7 +4,7 @@ mod services;
 mod gui;
 mod config;
 
-use gui::cli::common::{clear_screen, end_of_run, user_choice};
+use gui::cli::common::{clear_screen, user_choice};
 use gui::cli::submenu::submenu;
 use crossterm::terminal::disable_raw_mode;
 use environments::tic_tac_toe::{TicTacToeVersusRandom, TTT_NUM_ACTIONS, TTT_NUM_STATE_FEATURES};
@@ -34,7 +34,6 @@ fn main() {
             4 => { break; }
             _ => {}
         }
-        end_of_run();
     }
     disable_raw_mode().unwrap();
 }

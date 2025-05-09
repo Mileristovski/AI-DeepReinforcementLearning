@@ -57,7 +57,7 @@ pub fn run_env_heuristic<
     env.reset();
 }
 
-pub fn run_benchmark_random_agents<    
+pub fn run_benchmark_random_agents<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display

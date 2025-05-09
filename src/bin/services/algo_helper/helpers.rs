@@ -1,6 +1,13 @@
+use std::fmt::Display;
+use std::io;
+use burn::module::AutodiffModule;
 use burn::prelude::*;
 use rand::prelude::IteratorRandom;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand_xoshiro::Xoshiro256PlusPlus;
+use crate::environments::env::DeepDiscreteActionsEnv;
+use crate::config::{MyAutodiffBackend, MyBackend};
+use crate::services::algo_helper::qmlp::{Forward, MyQmlp};
 
 pub fn argmax(row: &Vec<f32>) -> usize {
     row.iter()
@@ -49,33 +56,57 @@ pub fn get_device() -> burn::backend::libtorch::LibTorchDevice {
         burn::backend::libtorch::LibTorchDevice::Cpu
     }
 }
-/*
-pub fn epsilon_greedy_action(
-    aa: DVector<i32>,          // Available actions
-    q: &Vec<Vec<f32>>,   // Q-table
-    state: usize,        // Current state
-    epsilon: f32,        // Exploration probability
-    rng: &mut impl rand::Rng, // Random number generator
-) -> i32 {
-    let rnd_number = rand::random::<f32>();
 
-    if rnd_number <= epsilon {
-        // Explore: Choose a random action
-        *aa.as_slice().choose(rng).unwrap()
-    } else {
-        // Exploit: Choose the best action
-        let mut best_a = 0;
-        let mut best_a_score = f32::MIN;
+pub fn test_trained_model<
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default,
+>(
+    device: &<MyBackend as Backend>::Device,
+    model: MyQmlp<MyAutodiffBackend>,
+)
+where
+    MyQmlp<MyBackend>: Forward<B = MyBackend>,
+{
+    let valid_model: MyQmlp<MyBackend> = model.valid();
+    let mut env = Env::default();
+    env.set_against_random();
 
-        for &a in aa.iter() {
-            let q_s_a = q[state][a as usize];
+    let mut rng = Xoshiro256PlusPlus::from_entropy();
+    let minus_one = Tensor::<MyBackend, 1>::from_floats([-1.0; NUM_ACTIONS], device);
+    let plus_one  = Tensor::<MyBackend, 1>::from_floats([ 1.0; NUM_ACTIONS], device);
+    let fmin_vec  = Tensor::<MyBackend, 1>::from_floats([f32::MIN; NUM_ACTIONS], device);
 
-            if q_s_a >= best_a_score {
-                best_a = a;
-                best_a_score = q_s_a;
-            }
+    loop {
+        env.reset();
+        while !env.is_game_over() {
+            println!("{}", env);
+
+            let s_tensor = Tensor::<MyBackend, 1>::from_floats(env.state_description().as_slice(), device);
+            let mask_tensor = Tensor::<MyBackend, 1>::from(env.action_mask()).to_device(device);
+            
+            let q_s: Tensor<MyBackend, 1> = valid_model.forward(s_tensor);
+
+            let a = epsilon_greedy_action::<MyBackend, NUM_STATE_FEATURES, NUM_ACTIONS>(
+                &q_s,
+                &mask_tensor,
+                &minus_one,
+                &plus_one,
+                &fmin_vec,
+                env.available_actions_ids(),
+                1e-5,
+                &mut rng,
+            );
+            env.step_from_idx(a);
         }
-        best_a
+
+        println!("{}", env);
+        println!("Press Enter to continue or 'quit' to quit");
+        
+        let mut buf = String::new();
+        io::stdin().read_line(&mut buf).unwrap();
+        if buf.trim().eq_ignore_ascii_case("quit")  {  
+            break 
+        }
     }
 }
-*/
