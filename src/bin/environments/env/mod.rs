@@ -10,4 +10,5 @@ pub trait DeepDiscreteActionsEnv<const NUM_STATES_FEATURES: usize, const NUM_ACT
     fn set_from_random_state(&mut self);
     fn set_against_random(&mut self) -> bool;
     fn step_from_idx(&mut self, action_idx: usize);
+    fn state_index(&self) -> usize;
 }
