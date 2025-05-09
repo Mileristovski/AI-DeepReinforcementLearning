@@ -11,6 +11,8 @@ pub struct TicTacToeVersusRandom {
     pub player: u8,
     pub score: f32,
     pub is_game_over: bool,
+    pub is_random_state: bool,
+    against_random: bool
 }
 
 impl Default for TicTacToeVersusRandom {
@@ -20,6 +22,8 @@ impl Default for TicTacToeVersusRandom {
             player: 0,
             score: 0.0,
             is_game_over: false,
+            is_random_state: false,
+            against_random: false
         }
     }
 }
@@ -93,15 +97,23 @@ impl DeepDiscreteActionsEnv<TTT_NUM_STATE_FEATURES, TTT_NUM_ACTIONS> for TicTacT
             return;
         }
 
+        // Switch player
         if self.player == 0 {
-            self.player = 1;
-
+            self.player = 1
+        } else if self.player == 1 {
+            self.player = 0
+        }
+        
+        // Verify random
+        if !self.against_random {
+            return;
+        }
+        
+        if self.player == 0 && self.against_random {
             // random move
             let mut rng = rand::thread_rng();
             let random_action = self.available_actions_ids().choose(&mut rng).unwrap();
             self.step(random_action);
-        } else {
-            self.player = 0;
         }
     }
 
@@ -119,6 +131,10 @@ impl DeepDiscreteActionsEnv<TTT_NUM_STATE_FEATURES, TTT_NUM_ACTIONS> for TicTacT
         self.score = 0.0;
         self.is_game_over = false;
     }
+
+    fn set_from_random_state(&mut self) { self.is_random_state = !self.is_random_state }
+
+    fn set_against_random(&mut self) { self.against_random = !self.against_random }
 }
 
 impl Display for TicTacToeVersusRandom {
@@ -137,6 +153,7 @@ impl Display for TicTacToeVersusRandom {
         }
         writeln!(f, "Score: {}", self.score)?;
         writeln!(f, "Player {} to play", self.player)?;
+        writeln!(f,"Available actions: {:?}",self.available_actions_ids().collect::<Vec<_>>())?;
         writeln!(f, "Game Over: {}", self.is_game_over)?;
         Ok(())
     }

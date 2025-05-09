@@ -13,6 +13,7 @@ pub struct LineWorld {
     pub is_game_over: bool,
     pub current_state: usize,
     pub is_random_state: bool,
+    against_random: bool
 }
 
 impl Default for LineWorld {
@@ -26,6 +27,7 @@ impl Default for LineWorld {
             is_game_over: false,
             current_state: NUM_BOARD_SIZE/2,
             is_random_state: false,
+            against_random: false
         }
     }
 }
@@ -91,6 +93,10 @@ impl DeepDiscreteActionsEnv<LINE_NUM_STATE_FEATURES, LINE_NUM_ACTIONS> for LineW
             NUM_BOARD_SIZE / 2 
         };
     }
+
+    fn set_from_random_state(&mut self) { self.is_random_state = !self.is_random_state }
+    
+    fn set_against_random(&mut self) { self.against_random = !self.against_random }
 }
 
 impl Display for LineWorld {
@@ -104,6 +110,7 @@ impl Display for LineWorld {
         }
         f.write_str("\n")?;
         writeln!(f, "Score: {}", self.score)?;
+        writeln!(f,"Available actions: {:?}",self.available_actions_ids().collect::<Vec<_>>())?;
         writeln!(f, "Game Over: {}", self.is_game_over)?;
         Ok(())
     }

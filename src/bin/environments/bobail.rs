@@ -1,18 +1,24 @@
-use colored::*;
-use rand::seq::SliceRandom;
+use crate::environments::env::DeepDiscreteActionsEnv;
+use rand::prelude::IteratorRandom;
+use std::fmt::Display;
 use rand::thread_rng;
-use regex::Regex;
+use std::collections::HashMap;
 
-use crate::environments::env::Env;
+pub const BB_NUM_STATE_FEATURES: usize = 300;
+pub const BB_NUM_ACTIONS: usize = 48;
+const ROWS: usize = 5;
+const COLS: usize = 5;
+const NUM_BOARD_SIZE: usize = ROWS*COLS;
 
-pub struct BobailEnv {
-    pub board: [usize; 25],
+#[derive(Clone)]
+pub struct BobailHeuristic {
+    pub board: [f32; NUM_BOARD_SIZE],
     pub current_player: usize,
     pub previous_player: usize,
-    game_over: bool,
+    is_game_over: bool,
     winner: usize,
     terminal_states: Vec<usize>,
-    current_score: f32,
+    score: f32,
     r: Vec<f32>,
     rows: usize,
     cols: usize,
@@ -21,86 +27,80 @@ pub struct BobailEnv {
     pub bobail: usize,
     bobail_move: bool,
     directions:  [(isize, isize, isize); 8],
-    empty: usize
+    empty: f32,
+    chip_lookup: HashMap<usize, usize>,
+    pub is_random_state: bool,
+    against_random: bool
 }
 
-impl BobailEnv {
+impl BobailHeuristic {
     pub fn new() -> Self {
-        let terminal_states = vec!(0usize, 1, 2, 3, 4, 20, 21, 22, 23, 24);
-        const ROWS: usize = 5;
-        const COLS: usize = 5;
-        let blue_player = 1;
-        let red_player = 2;
-        let bobail = 3;
-        let empty = 0;
-        let mut board: [usize; ROWS * COLS] = [0; ROWS * COLS];
-        let current_player = blue_player.clone();
-        let previous_player = blue_player.clone();
-        let game_over = false;
-        let winner = 0;
-        let current_score = 0.0;
-        let r = vec![-1.0f32, 0.0, 1.0];
-        let bobail_move = false;
-        let directions = [
-            (-1, 0, 0),     // Up
-            (1, 0, 1),      // Down
-            (0, -1, 2),     // Left
-            (0, 1, 3),      // Right
-            (-1, -1, 4),    // Up-Left
-            (-1, 1, 5),     // Up-Right
-            (1, -1, 6),     // Down-Left
-            (1, 1, 7),      // Down-Right
-        ];
+        let chip_lookup: HashMap<usize, usize> = HashMap::from([
+            // blue
+            (6,  0), (7,  1), (8,  2), (9,  3), (10,  4),
+            // red
+            (1, 20), (2, 21), (3, 22), (4, 23), (5, 24),
+            // bobail
+            (11, NUM_BOARD_SIZE / 2),
+        ]);
 
-
-        let mut env = Self {
-            current_player,
-            previous_player,
+        let mut board = [0.0f32; NUM_BOARD_SIZE];
+        for red in 0..COLS {
+            board[red] = red as f32 + 6.0;
+        }
+        // Add the red player
+        for blue in NUM_BOARD_SIZE-COLS..NUM_BOARD_SIZE {
+            board[blue] = blue as f32 - ((NUM_BOARD_SIZE-COLS) as f32 - 1.0);
+        }
+        // Add the bobail
+        board[NUM_BOARD_SIZE/2] = 11.0;
+        Self {
+            current_player: 1,
+            previous_player: 1,
             board,
-            game_over,
-            winner,
-            terminal_states,
-            current_score,
-            r,
+            is_game_over: false,
+            winner: 0,
+            terminal_states: vec!(0usize, 1, 2, 3, 4, 20, 21, 22, 23, 24),
+            score: 0.0,
+            r: vec![-1.0f32, 0.0, 1.0],
             rows: ROWS,
             cols: COLS,
-            blue_player,
-            red_player,
-            bobail,
-            bobail_move,
-            directions,
-            empty
-        };
-
-        env.init_board();
-
-        env
-    }
-
-    fn init_board(&mut self) {
-        // Add the blue player
-        for red in 0..self.cols {
-            self.board[red] = self.red_player.clone();
+            blue_player: 1,
+            red_player: 2,
+            bobail: 3,
+            bobail_move: false,
+            directions: [
+                (-1, 0, 0),     // Up
+                (1, 0, 1),      // Down
+                (0, -1, 2),     // Left
+                (0, 1, 3),      // Right
+                (-1, -1, 4),    // Up-Left
+                (-1, 1, 5),     // Up-Right
+                (1, -1, 6),     // Down-Left
+                (1, 1, 7),      // Down-Right
+            ],
+            empty: 0.0,
+            chip_lookup,
+            is_random_state: false,
+            against_random: false,
         }
-
-        // Add the red player
-        for blue in self.board.len()- self.cols..self.board.len() {
-            self.board[blue] = self.blue_player.clone();
-        }
-
-        // Add the bobail
-        self.board[self.board.len()/2] = self.bobail.clone();
     }
 
-    pub fn get_row_col(action: i32) -> (usize, usize, usize) {
-        let current_row = action/100;
-        let current_col = action%100/10;
-        let direction = action%10;
+    fn decode_action(&self, action: usize) -> (usize, usize, usize, usize) {
+        let chip_id   = action / 10;       // 1-11
+        let direction = action % 10;       // 0-7
 
-        ((current_row - 1) as usize, (current_col - 1) as usize, direction as usize)
+        let index = *self.chip_lookup
+            .get(&chip_id)
+            .expect("chip_id missing from lookup");
+
+        let row = index / self.cols;
+        let col = index % self.cols;
+
+        (chip_id, row, col, direction)
     }
 
-    fn get_possible_moves(&self, row: usize, col: usize) -> Vec<isize> {
+    fn get_possible_moves(&self, row: usize, col: usize) -> Vec<usize> {
         let mut possible_moves = Vec::new();
 
         for &(dr, dc, direction) in &self.directions {
@@ -111,204 +111,180 @@ impl BobailEnv {
             if new_row >= 0 && new_row < self.rows as isize && new_col >= 0 && new_col < self.cols as isize {
                 let index = (new_row as usize) * self.cols + (new_col as usize);
                 if self.board[index] == self.empty { // Only move if the spot is empty
-                    possible_moves.push(direction);
+                    possible_moves.push(direction as usize);
                 }
             }
         }
         possible_moves
     }
 
-    fn move_piece(&mut self, action: i32) -> (usize, usize) {
-        let ( row, col, dir) = Self::get_row_col(action);
-        let mut new_row = 0;
-        let mut new_col = 0;
+    fn move_piece(&mut self, action: usize) -> (usize, usize) {
+        let (chip_id, row, col, dir) = self.decode_action(action);
 
-        // Move as far as possible in the given direction
-        let correct_direction = self.directions.iter().find(|&&(_, _, direction)| direction == dir as isize);
+        let (dr, dc, _) = self
+            .directions
+            .iter()
+            .copied()
+            .find(|&(_, _, d)| d == dir as isize)
+            .expect("Invalid direction");
 
-        if let Some(&(dr, dc, _)) = &correct_direction {
-            if self.bobail_move {
-                new_row = row as isize + dr;
-                new_col = col as isize + dc;
-            } else {
-                new_row = row as isize;
-                new_col = col as isize;
+        let mut new_row = row as isize;
+        let mut new_col = col as isize;
 
-                // Move as far as possible in the given direction
-                loop {
-                    let next_row = new_row + dr;
-                    let next_col = new_col + dc;
-
-                    // Check if the new position is out of bounds
-                    if next_row < 0 || next_row >= self.rows as isize || next_col < 0 || next_col >= self.cols as isize {
-                        break; // Stop at the board edge
-                    }
-
-                    let index = (next_row as usize) * self.cols + (next_col as usize);
-
-                    // Stop if there's an obstacle
-                    if self.board[index] != self.empty {
-                        break;
-                    }
-
-                    // Update position
-                    new_row = next_row;
-                    new_col = next_col;
-                }
-            }
-
-            // Check if the new position is within bounds
-            let index = (new_row as usize) * self.cols + (new_col as usize);
-            if self.board[index] == self.empty {
-                self.board[row * self.rows + col] = self.empty;
-                self.board[new_row as usize * self.rows + new_col as usize] = self.current_player.clone();
-            }
+        if self.bobail_move {
+            new_row += dr;
+            new_col += dc;
         } else {
-            panic!("Something went wrong");
+            loop {
+                let next_row = new_row + dr;
+                let next_col = new_col + dc;
+
+                if next_row < 0
+                    || next_row >= self.rows as isize
+                    || next_col < 0
+                    || next_col >= self.cols as isize
+                {
+                    break;
+                }
+
+                let index = (next_row as usize) * self.cols + next_col as usize;
+                if self.board[index] != self.empty {
+                    break;
+                }
+
+                new_row = next_row;
+                new_col = next_col;
+            }
         }
+
+        let dst_index = new_row as usize * self.cols + new_col as usize;
+        let src_index = row * self.cols + col;
+
+        self.board[src_index] = self.empty;
+        self.board[dst_index] = chip_id as f32;
+        self.chip_lookup.insert(chip_id, dst_index);
 
         (new_row as usize, new_col as usize)
     }
 
-    fn clean_string(s: &str) -> String {
-        let ansi_escape = Regex::new("\x1b\\[[0-9;]*m").unwrap();
-        ansi_escape.replace_all(s, "").to_string()
-    }
-
-    pub fn get_input_vec(&self) -> Vec<u8> {
-        let mut state_bin = vec![];
-        for state in 0..self.board.len() * 4 {
-            state_bin.push(state as u8);
+    fn display_helper(num: usize) -> String {
+        match num {
+            1..=10 => format!("{:^4}", if num <= 5 {
+                format!("B{}", num)
+            } else {
+                format!("R{}", num)
+            }),
+            11 => format!("{:^4}", "Y11"),
+            _ => "    ".to_string(),
         }
-        state_bin
-    }
-    
-    pub fn get_output_vec(&mut self) -> Vec<i32> {
-        let old_board = self.board.clone();
-        self.board = [0; 25];
-
-        let mut state_vec = vec![];
-
-        for i in 0..self.board.len() {
-            self.board[i] = self.blue_player;
-            for action in self.available_actions() {
-                state_vec.push(action);
-            }
-            self.board[i] = self.empty;
-        }
-
-        self.board = old_board;
-        state_vec
-    }
-
-    fn display_helper(num: usize) -> ColoredString {
-        let res = match num {
-            1 => Colorize::blue("B"),
-            2 => Colorize::red("R"),
-            3 => Colorize::yellow("Y"),
-            _ => Colorize::normal(" "),
-        };
-
-        res
     }
 }
 
-impl Env for BobailEnv {
-    fn num_states(&self) -> usize { self.board.len() }
+impl Default for BobailHeuristic {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
-    fn num_actions(&self) -> usize { 144 }
-
-    fn num_rewards(&self) -> usize { self.r.len() }
-
-    fn get_reward_vector(&self) -> Vec<f32> { self.r.clone() }
-
-    fn get_terminal_states(&self) -> Vec<usize> { self.terminal_states.clone() }
-
-    fn get_reward(&self, _num: usize) -> f32 { self.r[_num] }
-
-    fn state_id(&self) -> Vec<i32> {
-        self.board.iter().map(|&x| x as i32).collect()
+impl DeepDiscreteActionsEnv<BB_NUM_STATE_FEATURES, BB_NUM_ACTIONS> for BobailHeuristic {
+    fn state_description(&self) -> [f32; BB_NUM_STATE_FEATURES] {
+        std::array::from_fn(|idx| {
+            let cell = idx / 12;
+            let feature = idx % 12;
+            if self.board[cell] == feature as f32 {
+                1.0
+            } else {
+                0.0
+            }
+        })
     }
 
-    fn reset(&mut self) {
-        self.board = core::array::from_fn(|_| self.empty);
-        self.init_board();
-        self.current_player = self.blue_player.clone();
-        self.game_over = false;
-        self.winner = self.empty;
-        self.bobail_move = false;
-    }
+    fn available_actions_ids(&self) -> impl Iterator<Item = usize> {
+        let mut available_actions = Vec::new();
 
-    fn display(&self) {
-        println!("- + - + - + - + -");
-        for row in 0..5 {
-            println!("{} | {} | {} | {} | {}",
-                     Self::display_helper(self.board[row * self.cols]),
-                     Self::display_helper(self.board[row * self.cols + 1]),
-                     Self::display_helper(self.board[row * self.cols + 2]),
-                     Self::display_helper(self.board[row * self.cols + 3]),
-                     Self::display_helper(self.board[row * self.cols + 4]));
-            if row < self.cols { println!("- + - + - + - + -"); }
-        }
-        println!();
-    }
+        // Choose which chips belong to the current player
+        let controlled_chip_ids: Vec<usize> = if self.bobail_move {
+            vec![11]
+        } else {
+            match self.current_player {
+                1 => vec![1, 2, 3, 4, 5],       // Blue player
+                2 => vec![6, 7, 8, 9, 10],      // Red player
+                _ => vec![]
+            }
+        };
 
-    fn is_forbidden(&self, action: i32) -> bool {
-        !self.available_actions().iter().any(|&x| x == action)
-    }
 
-    fn is_game_over(&self) -> bool {
-        let bobail_index: Vec<usize> = self.board.iter()
-            .enumerate()
-            .filter_map(|(idx, c)| if *c == self.bobail { Some(idx) } else { None })
-            .collect();
+        for &chip_id in &controlled_chip_ids {
+            if let Some(&index) = self.chip_lookup.get(&chip_id) {
+                let row = index / self.cols;
+                let col = index % self.cols;
 
-        self.terminal_states.iter().any(|&x| x == bobail_index[0]) || self.available_actions().is_empty() ||self.game_over
-    }
+                let directions = self.get_possible_moves(row, col);
 
-    fn available_actions(&self) -> Vec<i32> {
-        let mut available_action = Vec::new();
-
-        let indexes: Vec<usize> = self.board.iter()
-            .enumerate()
-            .filter_map(|(idx, c)| if *c == self.current_player { Some(idx) } else { None })
-            .collect();
-
-        for &elem in indexes.iter() {
-            let row = (elem / self.rows) as i32;
-            let col = (elem % self.cols) as i32;
-            let all_moves = Self::get_possible_moves(&self, row as usize, col as usize);
-            for action in all_moves.iter() {
-                available_action.push((row+1)*100 + (col+1)*10 + *action as i32);
+                for &dir in &directions {
+                    // Action = 10 * chip_id + direction
+                    let action = chip_id * 10 + dir;
+                    available_actions.push(action);
+                }
             }
         }
 
-        available_action
+        available_actions.into_iter()
     }
 
-    fn step(&mut self, action: i32) {
-        if self.game_over || self.is_forbidden(action) {
-            return;
+    fn action_mask(&self) -> [f32; BB_NUM_ACTIONS] {
+        let mut mask = [0.0; BB_NUM_ACTIONS];
+
+        // Only generate when it's Blue's turn
+        if self.current_player != self.blue_player {
+            return mask;
+        }
+
+        // Index 0 is bobail, 1-5 are blue chips
+        let agent_chip_ids = [11, 1, 2, 3, 4, 5];
+
+        for (i, &chip_id) in agent_chip_ids.iter().enumerate() {
+            if let Some(&index) = self.chip_lookup.get(&chip_id) {
+                if (self.bobail_move && [11].contains(&chip_id)) || (!self.bobail_move && [1, 2, 3, 4, 5].contains(&chip_id)) {
+                    let row = index / self.cols;
+                    let col = index % self.cols;
+
+                    for dir in self.get_possible_moves(row, col) {
+                        let mask_index = i * 8 + dir;
+                        mask[mask_index] = 1.0;
+                    }
+                }
+            }
+        }
+
+        mask
+    }
+
+    fn step(&mut self, action: usize) {
+        if self.is_game_over {
+            panic!("Trying to play while Game is Over");
         }
 
         // Move the piece
         let (new_row, _) = Self::move_piece(self, action);
 
-        // Change player
-        self.current_player = if self.current_player == self.bobail && self.previous_player == self.blue_player {
-            self.bobail_move = false;
-            self.red_player.clone()
-        } else if self.current_player == self.bobail && self.previous_player == self.red_player {
-            self.bobail_move = false;
-            self.blue_player.clone()
-        } else {
-            self.bobail_move = true;
-            self.previous_player = self.current_player.clone();
-            self.bobail.clone()
-        };
+        self.bobail_move = !self.bobail_move;
 
         // Verify if the game is over
-        if self.is_game_over() {
+        self.is_game_over = {
+            let bobail_index = self.chip_lookup.get(&11);
+
+            let bobail_in_terminal = match bobail_index {
+                Some(&idx) => self.terminal_states.contains(&idx),
+                None => false,
+            };
+
+            let no_actions_left = self.available_actions_ids().next().is_none();
+
+            bobail_in_terminal || no_actions_left
+        };
+
+        if self.is_game_over {
             self.winner = if new_row == 0 {
                 self.red_player.clone()
             } else if new_row == self.rows-1 {
@@ -316,63 +292,117 @@ impl Env for BobailEnv {
             } else {
                 self.previous_player.clone()
             };
-            self.game_over = true;
+
+            // Add the rewards to the score
+            if self.current_player == self.blue_player {
+                self.score += 1.0;
+            } else  {
+                self.score -= 1.0;
+            }
+        };
+
+        if self.bobail_move {
+            self.current_player = if self.current_player == self.blue_player {
+                self.red_player
+            } else {
+                self.blue_player
+            };
         }
 
-        // Add the rewards to the score
-        if self.game_over && self.winner == self.blue_player {
-            self.current_score += self.get_reward(2);
-        } else if self.game_over && self.winner == self.red_player {
-            self.current_score += self.get_reward(0);
-        } else if self.current_player == self.blue_player && !self.bobail_move {
-            self.current_score += self.get_reward(1); // Add a movement penalty
+        if self.against_random && self.current_player == self.red_player {
+            // random move
+            let mut rng = thread_rng();
+            let random_action = self.available_actions_ids().choose(&mut rng).unwrap();
+            self.step(random_action);
         }
     }
 
-    fn score(&self) -> f32 { self.current_score }
+    fn is_game_over(&self) -> bool { self.is_game_over }
 
-    fn start_from_random_state(&mut self) {
-        self.board = core::array::from_fn(|_| self.empty);
-        let mut rng = thread_rng();
+    fn score(&self) -> f32 { self.score }
 
-        // Get all board positions except first and last row for bobail
-        let valid_positions: Vec<usize> = (self.cols..self.board.len() - self.cols).collect();
+    fn reset(&mut self) {
+        let chip_lookup: HashMap<usize, usize> = HashMap::from([
+            // blue
+            (6,  0), (7,  1), (8,  2), (9,  3), (10,  4),
+            // red
+            (1, 20), (2, 21), (3, 22), (4, 23), (5, 24),
+            // bobail
+            (11, NUM_BOARD_SIZE / 2),
+        ]);
 
-        // Place bobail randomly
-        if let Some(&bobail_pos) = valid_positions.choose(&mut rng) {
-            self.board[bobail_pos] = self.bobail.clone();
+        self.board = [0.0f32; NUM_BOARD_SIZE];
+        for red in 0..COLS {
+            self.board[red] = red as f32 + 6.0;
         }
-
-        // Get all empty positions
-        let mut empty_positions: Vec<usize> = self.board.iter()
-            .enumerate()
-            .filter_map(|(idx, c)| if *c == self.empty { Some(idx) } else { None })
-            .collect();
-
-        empty_positions.shuffle(&mut rng);
-
-        // Place 5 blue pieces
-        for _ in 0..5 {
-            if let Some(pos) = empty_positions.pop() {
-                self.board[pos] = self.blue_player.clone();
-            }
+        // Add the red player
+        for blue in NUM_BOARD_SIZE-COLS..NUM_BOARD_SIZE {
+            self.board[blue] = blue as f32 - ((NUM_BOARD_SIZE-COLS) as f32 - 1.0);
         }
+        // Add the bobail
+        self.board[NUM_BOARD_SIZE/2] = 11.0;
 
-        // Place 5 red pieces
-        for _ in 0..5 {
-            if let Some(pos) = empty_positions.pop() {
-                self.board[pos] = self.red_player.clone();
-            }
-        }
-
-        self.current_player = self.bobail.clone();
-        self.previous_player = self.red_player.clone();
-        self.game_over = false;
-        self.winner = self.empty;
+        self.current_player = 1;
+        self.previous_player = 1;
+        self.is_game_over = false;
+        self.winner = 0;
+        self.terminal_states = vec!(0usize, 1, 2, 3, 4, 20, 21, 22, 23, 24);
+        self.score = 0.0;
+        self.r = vec![-1.0f32, 0.0, 1.0];
+        self.rows = ROWS;
+        self.cols = COLS;
+        self.blue_player = 1;
+        self.red_player = 2;
+        self.bobail = 3;
         self.bobail_move = false;
+        self.directions=  [
+            (-1, 0, 0),     // Up
+            (1, 0, 1),      // Down
+            (0, -1, 2),     // Left
+            (0, 1, 3),      // Right
+            (-1, -1, 4),    // Up-Left
+            (-1, 1, 5),     // Up-Right
+            (1, -1, 6),     // Down-Left
+            (1, 1, 7),      // Down-Right
+        ];
+        self.empty = 0.0
     }
 
-    fn transition_probability(&self, _s: usize, _a: usize, _s_p: usize, _r_index: usize) -> f32 {
-        unimplemented!("Slows down application too much")
+    fn set_from_random_state(&mut self) { self.is_random_state = !self.is_random_state }
+
+    fn set_against_random(&mut self) { self.against_random = !self.against_random }
+}
+
+impl Display for BobailHeuristic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, " {}", "----+".repeat(self.cols - 1) + "----")?;
+
+        for row in 0..self.rows {
+            write!(f, "|")?;
+            for col in 0..self.cols {
+                let idx = row * self.cols + col;
+                let val = self.board[idx] as usize;
+                let cell = Self::display_helper(val);
+                write!(f, "{}|", cell)?;
+            }
+            writeln!(f)?;
+            writeln!(f, " {}", "----+".repeat(self.cols - 1) + "----")?;
+        }
+
+        writeln!(f)?;
+        writeln!(f, "Score: {}", self.score)?;
+        writeln!(f, "Player to move: {}", match self.current_player {
+            1 => "Blue",
+            2 => "Red",
+            _ => "Unknown",
+        })?;
+        writeln!(f,"Available actions: {:?}",self.available_actions_ids().collect::<Vec<_>>())?;
+        writeln!(f, "Game Over: {}", self.is_game_over)?;
+        writeln!(
+            f,
+            "Direction codes: 0=Up, 1=Down, 2=Left, 3=Right, 4=Up-Left, 5=Up-Right, 6=Down-Left, 7=Down-Right"
+        )?;
+
+        Ok(())
     }
 }
