@@ -1,7 +1,8 @@
 use std::fmt::Display;
 use std::io;
 use crate::gui::cli::common::{end_of_run, reset_screen, user_choice};
-use crate::services::envs::run::{run_env_heuristic, run_deep_learning, benchmark_random_agents};
+use crate::services::envs::run::{run_env_heuristic, run_benchmark_random_agents};
+use crate::algorithms::sarsa::run_episodic_semi_gradient_sarsa;
 use crossterm::terminal::disable_raw_mode;
 use crate::environments::env::DeepDiscreteActionsEnv;
 
@@ -16,8 +17,8 @@ pub fn submenu<
         let options = vec![
             if from_random { "Random is on, turn random off" } else { "Random is off, Turn random on" },
             "Heuristic",
+            "Episodic semi gradient SARSA",
             "Benchmark",
-            "DRL SARSA",
             "Quit"
         ];
 
@@ -28,8 +29,8 @@ pub fn submenu<
         match selected_index {
             0 => { from_random = !from_random; }
             1 => { run_env_heuristic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env, options[selected_index], from_random); },
-            2 => { run_deep_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            3 => { benchmark_random_agents::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env, options[selected_index]); },
+            2 => { run_episodic_semi_gradient_sarsa::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
+            3 => { run_benchmark_random_agents::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env, options[selected_index], from_random); },
             4 => { break; }
             _ => {}
         }
@@ -37,3 +38,4 @@ pub fn submenu<
     }
     disable_raw_mode().unwrap();
 }
+

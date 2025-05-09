@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::io;
 use crate::environments::env::DeepDiscreteActionsEnv;
 use burn::module::AutodiffModule;
 use burn::optim::decay::WeightDecayConfig;
@@ -8,8 +9,10 @@ use burn::tensor::backend::AutodiffBackend;
 use kdam::tqdm;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algo_helper::helpers::epsilon_greedy_action;
-use crate::services::algo_helper::qmlp::Forward;
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyBackend, MyDevice};
+use crate::services::algo_helper::helpers::{epsilon_greedy_action, get_device};
+use crate::services::algo_helper::qmlp::{Forward, MyQmlp};
+
 
 pub fn episodic_semi_gradient_sarsa<
     const NUM_STATE_FEATURES: usize,
@@ -39,8 +42,9 @@ where
     let mut rng = Xoshiro256PlusPlus::from_entropy();
 
     let mut total_score = 0.0;
-
     let mut env = Env::default();
+    env.set_against_random();
+    
     for ep_id in tqdm!(0..num_episodes) {
         let progress = ep_id as f32 / num_episodes as f32;
         let decayed_epsilon = (1.0 - progress) * start_epsilon + progress * final_epsilon;
@@ -75,7 +79,7 @@ where
 
         while !env.is_game_over() {
             let prev_score = env.score();
-            env.step(a);
+            env.step_from_idx(a);
             let r = env.score() - prev_score;
 
             let s_p = env.state_description();
@@ -119,4 +123,74 @@ where
     }
 
     model
+}
+
+
+pub fn run_episodic_semi_gradient_sarsa<
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display
+>()
+{
+    let device: MyDevice = get_device();
+    println!("Using device: {:?}", device);
+
+    // Create the model
+    let model = MyQmlp::<MyAutodiffBackend>::new(&device,
+                                                 NUM_STATE_FEATURES,
+                                                 NUM_ACTIONS);
+
+
+    let minus_one: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([-1.0; NUM_ACTIONS], &device);
+    let plus_one: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([ 1.0; NUM_ACTIONS], &device);
+    let fmin_vec: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
+    let parameters = DeepLearningParams::default();
+
+    // Train the model
+    let model =
+        episodic_semi_gradient_sarsa::<
+            NUM_STATE_FEATURES,
+            NUM_ACTIONS,
+            _,
+            MyAutodiffBackend,
+            Env
+        >(
+            model,
+            parameters.num_episodes,
+            parameters.gamma,
+            parameters.alpha,
+            parameters.start_epsilon,
+            parameters.final_epsilon,
+            &minus_one,
+            &plus_one,
+            &fmin_vec,
+            &device,
+        );
+
+    // Let's play some games (press enter to show the next game)
+    let mut env = Env::default();
+    env.set_against_random();
+    
+    let mut rng = Xoshiro256PlusPlus::from_entropy();
+    let minus_one: Tensor<MyBackend, 1> = Tensor::from_floats([-1.0; NUM_ACTIONS], &device);
+    let plus_one:  Tensor<MyBackend, 1> = Tensor::from_floats([ 1.0; NUM_ACTIONS], &device);
+    let fmin_vec:  Tensor<MyBackend, 1> = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
+    loop {
+        env.reset();
+        while !env.is_game_over() {
+            println!("{}", env);
+            let s = env.state_description();
+            let s_tensor: Tensor<MyBackend, 1> = Tensor::from_floats(s.as_slice(), &device);
+
+            let mask = env.action_mask();
+            let mask_tensor: Tensor<MyBackend, 1> = Tensor::from(mask).to_device(&device);
+            let q_s = model.valid().forward(s_tensor);
+
+            let a = epsilon_greedy_action::<MyBackend, NUM_STATE_FEATURES, NUM_ACTIONS>(&q_s, &mask_tensor, &minus_one,  &plus_one,  &fmin_vec, env.available_actions_ids(), 1e-5f32, &mut rng);
+            env.step_from_idx(a);
+        }
+        println!("{}", env);
+        let mut s = String::new();
+        io::stdin().read_line(&mut s).unwrap();
+    }
 }
