@@ -8,6 +8,52 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::config::{MyAutodiffBackend, MyBackend};
 use crate::services::algo_helper::qmlp::{Forward, MyQmlp};
+use burn::tensor::backend::AutodiffBackend;
+use burn::tensor::Tensor;
+
+pub fn softmax<B: AutodiffBackend>(logits: Tensor<B, 1>) -> Tensor<B, 1> {
+    // 1) subtract max for numerical stability
+    let max_val = logits.clone().max();
+    let shifted = logits - max_val.clone();
+    // 2) exponentiate
+    let exp    = shifted.exp();
+    // 3) sum of exps
+    let sum    = exp.clone().sum();
+    // 4) normalize
+    exp.div(sum)
+}
+
+pub fn masked_softmax<B: AutodiffBackend>(
+    logits: Tensor<B, 1>,
+    mask:   Tensor<B, 1>,
+) -> Tensor<B, 1> {
+    let max_val = (logits.clone() * mask.clone()).max();
+    let shifted = logits - max_val.clone();
+    let exp_all = shifted.exp();
+    let exp_masked = exp_all * mask.clone();
+    let sum = exp_masked.clone().sum();
+    exp_masked.div(sum)
+}
+
+pub fn masked_log_softmax<B: AutodiffBackend>(
+    logits: Tensor<B, 1>,
+    mask:   Tensor<B, 1>,
+) -> Tensor<B, 1> {
+    let neg_inf = Tensor::from_floats([f32::MIN; 1], &logits.device());
+    let masked_logits = logits.clone() * mask.clone() + neg_inf * (mask.clone().mul_scalar(-1.0).add_scalar(1.0));
+    log_softmax(masked_logits)
+}
+
+pub fn log_softmax<B: AutodiffBackend>(logits: Tensor<B, 1>) -> Tensor<B, 1> {
+    let max_val = logits.clone().max();
+    let shifted = logits.clone() - max_val.clone();
+    let exp = shifted.exp();
+    let sum_exp = exp.clone().sum();
+    let lse = sum_exp.log().add(max_val);
+    
+    logits - lse
+}
+
 
 pub fn argmax(row: &Vec<f32>) -> usize {
     row.iter()
