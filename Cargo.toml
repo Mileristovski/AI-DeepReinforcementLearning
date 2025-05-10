@@ -11,6 +11,9 @@ rand_xoshiro = "0.6.0"
 burn = { version = "0.17.0", features = ["autodiff", "tch"] }
 tch = { version = "0.19.0", features = ["download-libtorch"] }
 kdam = "0.6.2"
+csv = "1.2"
+serde = { version = "1.0", features = ["derive"] }
+chrono = "0.4.41"
 
 
 [[bin]]

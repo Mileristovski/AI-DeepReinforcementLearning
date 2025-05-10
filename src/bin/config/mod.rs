@@ -8,7 +8,18 @@ use burn::prelude::Backend;
 pub type MyBackend = LibTorch;
 pub type MyAutodiffBackend = Autodiff<MyBackend>;
 pub type MyDevice = <MyBackend as Backend>::Device;
-
+pub const EXPORT_AT_EP: [usize; 4] = [50, 100, 100_000, 1_000_000];
+pub const REPLAY_CAPACITY: usize = 100_000;
+pub const BATCH_SIZE: usize = 32;
+pub const TARGET_UPDATE_EVERY: usize = 1_000;
+pub const CAPACITY: usize = 100_000;
+pub const BATCH:    usize = 64;
+pub const TARGET_EVERY: usize = 10_000;          // gradient steps
+pub const PRIO_EPS:  f32 = 1e-6;
+pub const PRIO_MAX:  f32 = 10.0;
+pub const BETA_START:f32 = 0.4;
+pub const BETA_END:  f32 = 1.0;
+pub const BETA_FRAMES: usize = 1_000_000;
 /**
 * -------------------------------------------------------------------------
 * NEURAL NETWORK HIDDEN LAYERS
@@ -33,22 +44,26 @@ pub struct DeepLearningParams {
     // Q‑learning / SARSA
     pub gamma: f32,
     pub alpha: f32,        // base LR
-    pub per_alpha: f32,
-
+    pub ql_per_alpha: f32,
+    pub ql_replay_capacity: usize,
+    pub ql_batch_size: usize,
+    pub ql_target_update_every: usize,
+    
+    
     // actor‑critic / A2C extras
-    pub n_step: usize,
-    pub entropy_coef: f32,
-    pub policy_lr: f32,
-    pub critic_lr: f32,
+    pub ac_n_step: usize,
+    pub ac_entropy_coef: f32,
+    pub ac_policy_lr: f32,
+    pub ac_critic_lr: f32,
 
     // MCTS / AlphaZero
-    pub rollouts_per_action: usize,
+    pub mcts_rollouts_per_action: usize,
     pub mcts_simulations: usize,
     pub mcts_c: f32,
 
     // AlphaZero‑specific    
     pub az_self_play_games: usize,     
-    pub c: f32,
+    pub az_c: f32,
     
     // MuZero-specific
     pub mz_games_per_iter: usize,
@@ -64,30 +79,34 @@ pub struct DeepLearningParams {
 impl Default for DeepLearningParams {
     fn default() -> Self {
         Self {
-            num_episodes: 1_000,
-            episode_stop: 100,
+            num_episodes: 100,
+            episode_stop: 10,
             start_epsilon: 1.0,
             final_epsilon: 1e-5,
             
             // Q‑learning / SARSA
             gamma: 0.999,
             alpha: 3e-3,
-            per_alpha: 0.6,
+            ql_per_alpha: 0.6,
+            ql_replay_capacity: 100_000,
+            ql_batch_size: 32,
+            ql_target_update_every: 1000,
+            
 
             // actor‑critic
-            n_step: 5,
-            entropy_coef: 0.01,
-            policy_lr: 3e-3,
-            critic_lr: 6e-3,
+            ac_n_step: 5,
+            ac_entropy_coef: 0.01,
+            ac_policy_lr: 3e-3,
+            ac_critic_lr: 6e-3,
 
             // MCTS
-            rollouts_per_action: 50,
+            mcts_rollouts_per_action: 50,
             mcts_simulations: 100,
             mcts_c: 1.414,
 
             // AlphaZero
             az_self_play_games: 1,
-            c: 1.4,
+            az_c: 1.4,
 
             // MuZero
             mz_games_per_iter: 1,

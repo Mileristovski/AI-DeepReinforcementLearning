@@ -4,13 +4,14 @@ use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, REPLAY_CAPACITY, BATCH_SIZE, TARGET_UPDATE_EVERY, EXPORT_AT_EP};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
 use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
+use crate::services::algorithms::exports::model_free::q_learning::double_deep_q_learning_with_er::DqnErLogger;
 
 // Modified episodic_deep_q_learning to Double Deep Q-Learning with experience replay
 struct ReplayBuffer<S, const N: usize> {
@@ -58,14 +59,11 @@ pub fn episodic_double_deep_q_learning_er<
     fmin_vec:  &Tensor<B, 1>,
     _weight_decay: f32,
     device: &B::Device,
+    logger: &mut DqnErLogger
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
 {
-    const REPLAY_CAPACITY: usize = 100_000;
-    const BATCH_SIZE: usize = 32;
-    const TARGET_UPDATE_EVERY: usize = 1_000;
-
     let mut target = model.clone();
     let mut buffer = ReplayBuffer::<[f32; NUM_STATE_FEATURES], REPLAY_CAPACITY>::new();
     let mut optimizer = AdamConfig::new()
@@ -75,10 +73,13 @@ where
     let mut total = 0.0;
 
     // wrap episodes in tqdm for progress bar
-    for ep in tqdm!(0..num_episodes) {
-        // every 100 episodes, print mean score
-        if ep > 0 && ep % episode_stop == 0 {
-            println!("Mean Score : {:.3}", total / episode_stop as f32);
+    for ep in tqdm!(0..=num_episodes) {
+        if ep % episode_stop == 0 {
+            let mean = total / episode_stop as f32;
+            logger.log(ep, mean);
+            if EXPORT_AT_EP.contains(&ep) {
+                logger.save_model(&model, ep);
+            }
             total = 0.0;
         }
 
@@ -181,8 +182,8 @@ pub fn run_double_deep_q_learning_er<
     let minus_one = Tensor::from_floats([-1.0; NUM_ACTIONS], &device);
     let plus_one = Tensor::from_floats([1.0; NUM_ACTIONS], &device);
     let fmin_vec = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
-
     let params = DeepLearningParams::default();
+    let mut logger = DqnErLogger::new("./data/ddqler", &params, REPLAY_CAPACITY, BATCH_SIZE, TARGET_UPDATE_EVERY);
     let trained = episodic_double_deep_q_learning_er::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,
@@ -202,6 +203,7 @@ pub fn run_double_deep_q_learning_er<
         &fmin_vec,
         params.opt_weight_decay_penalty,
         &device,
+        &mut logger
     );
 
     test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);

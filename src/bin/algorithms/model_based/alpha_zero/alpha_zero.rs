@@ -6,7 +6,7 @@ use burn::prelude::*;
 use burn::tensor::backend::{AutodiffBackend, Backend};
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{get_device, log_softmax, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
@@ -14,7 +14,7 @@ use kdam::tqdm;
 use rand::{Rng, SeedableRng};
 use rand::distributions::WeightedIndex;
 use rand::prelude::{Distribution, IteratorRandom};
-
+use crate::services::algorithms::exports::model_based::alpha_zero::alpha_zero::AlphaZeroLogger;
 // bring in only the underlying search kernel, not the CLI runner:
 
 /// split a length-(A+1) tensor into ([0..A) policy logits, [A] value)
@@ -174,6 +174,7 @@ pub fn episodic_alpha_zero<
     mcts_simulations: usize,
     c: f32,
     device: &B::Device,
+    logger: &mut AlphaZeroLogger
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
@@ -185,11 +186,16 @@ where
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut total_score = 0.0;
 
-    for ep in tqdm!(0..num_iterations) {
-        if ep > 0 && ep % episode_stop == 0 {
-            println!("Mean Score : {:.3}", total_score / episode_stop as f32);
+    for ep in tqdm!(0..=num_iterations) {
+        if ep % episode_stop == 0 {
+            let mean = total_score / episode_stop as f32;
+            logger.log(ep, mean);
+            if EXPORT_AT_EP.contains(&ep) {
+                logger.save_model(&model, ep);
+            }
             total_score = 0.0;
         }
+        
         let mut training_data = Vec::new();
         for _ in 0..games_per_iteration {
             let mut env = Env::default();
@@ -250,6 +256,7 @@ pub fn run_alpha_zero<
 
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS + 1);
     let params = DeepLearningParams::default();
+    let mut logger = AlphaZeroLogger::new("./data/alpha_zero", &params);
     let trained = episodic_alpha_zero::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,
@@ -264,8 +271,9 @@ pub fn run_alpha_zero<
         params.alpha,
         params.opt_weight_decay_penalty,
         params.mcts_simulations,
-        params.c,
+        params.az_c,
         &device,
+        &mut logger
     );
 
     test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);

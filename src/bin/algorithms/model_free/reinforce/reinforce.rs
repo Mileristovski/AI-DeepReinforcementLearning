@@ -4,13 +4,14 @@ use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
 use rand::distributions::{Distribution, WeightedIndex};
 use rand::SeedableRng;
+use crate::services::algorithms::exports::model_free::reinforce::reinforce::ReinforceLogger;
 
 pub fn episodic_reinforce<
     const N_S: usize,
@@ -26,6 +27,7 @@ pub fn episodic_reinforce<
     lr           : f32,
     _wd          : f32,
     device       : &B::Device,
+    logger: &mut ReinforceLogger
 ) -> M
 where
     B  : AutodiffBackend<FloatElem = f32, IntElem = i64>,
@@ -40,9 +42,12 @@ where
     // “minus ∞” used for masking illegal actions
     let neg_inf = Tensor::<B,1>::from_floats([-1e9; N_A], device);
 
-    for ep in tqdm!(0..num_episodes) {
-        if ep > 0 && ep % log_every == 0 {
-            println!("Mean Score : {:.3}", mean / log_every as f32);
+    for ep in tqdm!(0..=num_episodes) {
+        if ep % log_every == 0 {
+            logger.log(ep, mean);
+            if EXPORT_AT_EP.contains(&ep) {
+                logger.save_model(&model, ep);
+            }
             mean = 0.0;
         }
 
@@ -120,7 +125,7 @@ pub fn run_reinforce<
 
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
     let params = DeepLearningParams::default();
-
+    let mut logger = ReinforceLogger::new("./data/reinforce", &params);
     let trained = episodic_reinforce::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,
@@ -135,6 +140,7 @@ pub fn run_reinforce<
         params.alpha, 
         params.opt_weight_decay_penalty,
         &device,
+        &mut logger
     );
 
     test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);

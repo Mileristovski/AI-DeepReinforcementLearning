@@ -87,7 +87,7 @@ fn episodic_random_rollout<
     env.set_against_random();
 
     let mut score_sum = 0.0;
-    for ep in tqdm!(0..episodes) {
+    for ep in tqdm!(0..=episodes) {
         if ep > 0 && ep % log_every == 0 {
             println!("Mean Score : {:.3}", score_sum / log_every as f32);
             score_sum = 0.0;
@@ -134,8 +134,8 @@ pub fn run_random_rollout<
     episodic_random_rollout::<N_S, N_A, Env>(
         p.num_episodes,
         p.episode_stop,
-        p.rollouts_per_action,
+        p.mcts_rollouts_per_action,
         &mut rng,
     );
-    test_random_rollout::<N_S, N_A, Env>(p.rollouts_per_action, &mut rng);
+    test_random_rollout::<N_S, N_A, Env>(p.mcts_rollouts_per_action, &mut rng);
 }

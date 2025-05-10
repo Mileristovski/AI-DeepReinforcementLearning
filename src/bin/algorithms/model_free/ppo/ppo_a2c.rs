@@ -4,13 +4,14 @@ use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{softmax, log_softmax, get_device, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
 use rand::distributions::{Distribution, WeightedIndex};
 use rand::SeedableRng;
+use crate::services::algorithms::exports::model_free::a2c::A2cLogger;
 
 fn episodic_a2c<
     const N_S: usize,
@@ -28,6 +29,7 @@ fn episodic_a2c<
     lr_val       : f32,
     _wd          : f32,
     device       : &B::Device,
+    logger: &mut A2cLogger
 ) -> P
 where
     B : AutodiffBackend<FloatElem = f32, IntElem = i64>,
@@ -44,12 +46,15 @@ where
     let mut score_sum = 0.0;
     let mut env       = Env::default(); env.set_against_random();
 
-    for ep in tqdm!(0..num_episodes) {
-        if ep > 0 && ep % log_every == 0 {
-            println!("Mean Score : {:.3}", score_sum / log_every as f32);
+    for ep in tqdm!(0..=num_episodes) {
+        if ep % log_every == 0 {
+            let mean = score_sum / log_every as f32;
+            logger.log(ep, mean);
+            if EXPORT_AT_EP.contains(&ep) {
+                logger.save_model(&policy, ep);
+            }
             score_sum = 0.0;
         }
-        env.reset();
 
         // (state, action, reward) buffer
         let mut traj: Vec<([f32; N_S], usize, f32)> = Vec::new();
@@ -131,9 +136,9 @@ pub fn run_ppo_a2c<
 
     let policy = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
     let critic = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, 1);
-
     // hyperparameters
     let params = DeepLearningParams::default();
+    let mut logger = A2cLogger::new("./data/a2c", &params);
     let trained = episodic_a2c::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,
@@ -146,13 +151,14 @@ pub fn run_ppo_a2c<
         critic,
         params.num_episodes,
         params.episode_stop,
-        params.n_step,
+        params.ac_n_step,
         params.gamma,
-        params.entropy_coef,
-        params.policy_lr,
-        params.critic_lr,
+        params.ac_entropy_coef,
+        params.ac_policy_lr,
+        params.ac_critic_lr,
         params.opt_weight_decay_penalty,
         &device,
+        &mut logger
     );
 
     test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);

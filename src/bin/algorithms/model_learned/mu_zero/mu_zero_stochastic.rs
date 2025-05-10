@@ -6,12 +6,13 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 use rand::distributions::{Distribution,WeightedIndex};
 use rand_distr::StandardNormal;
 use crate::services::algorithms::helpers::{run_mcts_pi, log_softmax, get_device, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, EXPORT_AT_EP};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
 use rand::prelude::IteratorRandom;
 use rand_xoshiro::rand_core::SeedableRng;
+use crate::services::algorithms::exports::model_learned::mu_zero::mu_zero_sto::MuZeroStochasticLogger;
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
 
@@ -54,6 +55,7 @@ pub fn episodic_mu_zero_stochastic<
     batch_size: usize,
     _weight_decay:      f32,
     device: &B::Device,
+    logger: &mut MuZeroStochasticLogger
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
@@ -67,11 +69,16 @@ where
     let mut history: [f32; HS];
     let mut total = 0.0;
     
-    for _iter in tqdm!(0..num_episodes) {
-        if _iter > 0 && _iter % episode_stop == 0 {
-            println!("Mean Score : {:.3}", total / (episode_stop * games_per_iter) as f32);
+    for _iter in tqdm!(0..=num_episodes) {
+        if _iter % episode_stop == 0 {
+            let mean = total / episode_stop as f32;
+            logger.log(_iter, mean);
+            if EXPORT_AT_EP.contains(&_iter) {
+                logger.save_model(&model, _iter);
+            }
             total = 0.0;
         }
+        
         for _ in 0..games_per_iter {
             let mut env = Env::default();
             env.set_against_random();
@@ -170,18 +177,20 @@ pub fn run_muzero_stochastic<
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS+1+1+NUM_STATE_FEATURES+NUM_STATE_FEATURES);
 
     let params = DeepLearningParams::default();
+    let mut logger = MuZeroStochasticLogger::new("./data/mu_zero_sto", &params);
     let trained = episodic_mu_zero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, _, _, Env>(
         model,
         params.num_episodes,
         params.episode_stop,
         params.mcts_simulations,
         params.mz_games_per_iter,
-        params.policy_lr,
+        params.ac_policy_lr,
         params.mz_c,
         params.mz_replay_cap,
         params.mz_batch_size,
         params.opt_weight_decay_penalty,
         &device,
+        &mut logger
     );
 
     test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);

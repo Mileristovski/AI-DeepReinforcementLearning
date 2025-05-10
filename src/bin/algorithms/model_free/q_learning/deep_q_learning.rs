@@ -4,12 +4,13 @@ use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
 use rand::SeedableRng;
+use crate::services::algorithms::exports::model_free::q_learning::deep_q_learning::DqnLogger;
 
 /// Vanilla 1-step Deep-Q-Learning (no replay / no DDQN).
 fn episodic_deep_q_learning<
@@ -31,6 +32,7 @@ fn episodic_deep_q_learning<
     fmin_vec : &Tensor<B,1>,
     _wd: f32,
     device: &B::Device,
+    logger: &mut DqnLogger,
 ) -> M
 where
     B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
@@ -45,9 +47,13 @@ where
     let mut rng       = Xoshiro256PlusPlus::from_entropy();
     let mut score_sum = 0.0;
 
-    for ep in tqdm!(0..num_episodes) {
+    for ep in tqdm!(0..=num_episodes) {
         if ep > 0 && ep % episode_stop == 0 {
-            println!("Mean Score : {:.3}", score_sum / episode_stop as f32);
+            let mean = score_sum / episode_stop as f32;
+            logger.log(ep, mean);
+            if EXPORT_AT_EP.contains(&ep) {
+                logger.save_model(&online, ep);
+            }
             score_sum = 0.0;
         }
         let frac = ep as f32 / num_episodes as f32;
@@ -115,6 +121,7 @@ pub fn run_deep_q_learning<
     let fmin_vec  = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
 
     let params = DeepLearningParams::default();
+    let mut logger = DqnLogger::new("./data/dql", &params);
     let trained = episodic_deep_q_learning::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,
@@ -134,6 +141,7 @@ pub fn run_deep_q_learning<
         &fmin_vec,
         params.opt_weight_decay_penalty,
         &device,
+        &mut logger,
     );
 
     test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);

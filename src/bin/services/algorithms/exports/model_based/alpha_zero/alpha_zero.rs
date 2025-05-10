@@ -1,0 +1,97 @@
+use std::fs::OpenOptions;
+use serde::Serialize;
+use burn::record::{NamedMpkFileRecorder, FullPrecisionSettings};
+use burn::module::Module;
+use burn::tensor::backend::Backend;
+use csv::Writer;
+use crate::services::algorithms::exports::base_logger::{BaseLogger, RecordBase};
+
+/// Flat tuple so csv::Writer can serialize it
+#[derive(Serialize)]
+pub struct AlphaZeroCsvRecord(
+    usize,  // iteration
+    f32,    // mean_score
+    f64,    // total_elapsed_secs
+    f64,    // interval_elapsed_secs
+    usize,  // num_iterations
+    usize,  // episode_stop
+    usize,  // games_per_iteration
+    f32,    // learning_rate
+    usize,  // mcts_simulations
+    f32,    // c (UCT constant)
+);
+
+pub struct AlphaZeroLogger {
+    base: BaseLogger,
+    num_iterations: usize,
+    episode_stop: usize,
+    games_per_iteration: usize,
+    learning_rate: f32,
+    mcts_simulations: usize,
+    c: f32,
+}
+
+impl AlphaZeroLogger {
+    pub fn new(
+        base_dir: &str,
+        params: &crate::config::DeepLearningParams,
+    ) -> Self {
+        let base = BaseLogger::new(base_dir);
+        AlphaZeroLogger {
+            base,
+            num_iterations:       params.num_episodes,
+            episode_stop:         params.episode_stop,
+            games_per_iteration:  params.az_self_play_games,
+            learning_rate:        params.alpha,
+            mcts_simulations:     params.mcts_simulations,
+            c:                    params.az_c,
+        }
+    }
+
+    /// Log once per `episode_stop` iterations
+    pub fn log(&mut self, iteration: usize, mean_score: f32) {
+        let base_metrics: RecordBase = self.base.make_base(iteration, mean_score);
+        let run_dir = self.base.run_dir().clone();
+
+        println!(
+            "AlphaZero Mean Score: {:.3} (iter {} — {:.2?} elapsed)",
+            mean_score,
+            iteration,
+            std::time::Duration::from_secs_f64(base_metrics.interval_elapsed_secs)
+        );
+
+        let rec = AlphaZeroCsvRecord(
+            base_metrics.episode,
+            base_metrics.mean_score,
+            base_metrics.total_elapsed_secs,
+            base_metrics.interval_elapsed_secs,
+            self.num_iterations,
+            self.episode_stop,
+            self.games_per_iteration,
+            self.learning_rate,
+            self.mcts_simulations,
+            self.c,
+        );
+
+        let mut w = Writer::from_writer(
+            OpenOptions::new()
+                .append(true)
+                .open(run_dir.join("metadata.csv"))
+                .unwrap(),
+        );
+        w.serialize(rec).unwrap();
+        w.flush().unwrap();
+    }
+
+    /// Save model snapshot at given iteration
+    pub fn save_model<M, B>(&self, model: &M, iter: usize)
+    where
+        M: Module<B>,
+        B: Backend,
+    {
+        let path = self.base.run_dir().join(format!("alpha_zero_model_{iter}.mpk"));
+        let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
+        model.clone().save_file(path, &recorder)
+            .expect("failed saving AlphaZero model");
+    }
+}

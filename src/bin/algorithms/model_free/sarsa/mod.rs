@@ -7,7 +7,8 @@ use burn::tensor::backend::AutodiffBackend;
 use kdam::tqdm;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
+use crate::services::algorithms::exports::model_free::sarsa::SarsaLogger;
 use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, test_trained_model};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
@@ -31,7 +32,8 @@ pub fn episodic_semi_gradient_sarsa<
     plus_one:  &Tensor<B, 1>,
     fmin_vec:  &Tensor<B, 1>,
     _weight_decay: f32,
-    device: &B::Device) -> M
+    device: &B::Device,
+    logger: &mut SarsaLogger) -> M
 where
     M::InnerModule: Forward<B=B::InnerBackend>,
 {
@@ -45,12 +47,16 @@ where
     let mut env = Env::default();
     env.set_against_random();
     
-    for ep_id in tqdm!(0..num_episodes) {
+    for ep_id in tqdm!(0..=num_episodes) {
         let progress = ep_id as f32 / num_episodes as f32;
         let decayed_epsilon = (1.0 - progress) * start_epsilon + progress * final_epsilon;
 
         if ep_id % episode_stop == 0 {
-            println!("Mean Score: {:.3}", total_score / episode_stop as f32);
+            let mean = total_score / episode_stop as f32;
+            logger.log(ep_id, mean);
+            if EXPORT_AT_EP.contains(&ep_id) {
+                logger.save_model(&model, ep_id);
+            }
             total_score = 0.0;
         }
         env.reset();
@@ -146,7 +152,8 @@ pub fn run_episodic_semi_gradient_sarsa<
     let plus_one: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([ 1.0; NUM_ACTIONS], &device);
     let fmin_vec: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
     let parameters = DeepLearningParams::default();
-
+    let mut logger = SarsaLogger::new("./data/sarsa", &parameters);
+    
     // Train the model
     let model =
         episodic_semi_gradient_sarsa::<
@@ -168,6 +175,7 @@ pub fn run_episodic_semi_gradient_sarsa<
             &fmin_vec,
             parameters.opt_weight_decay_penalty,
             &device,
+            &mut logger,
         );
 
     // Let's play some games (press enter to show the next game)

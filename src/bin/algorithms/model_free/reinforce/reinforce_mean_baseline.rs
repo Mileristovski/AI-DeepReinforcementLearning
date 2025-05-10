@@ -8,8 +8,9 @@ use rand::prelude::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use std::fmt::Display;
 
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
 use crate::environments::env::DeepDiscreteActionsEnv;
+use crate::services::algorithms::exports::model_free::reinforce::reinforce_mean_baseline::ReinforceBaselineLogger;
 use crate::services::algorithms::helpers::{
     get_device, masked_log_softmax, masked_softmax, test_trained_model,
 };
@@ -30,6 +31,7 @@ pub fn episodic_reinforce_baseline<
     gamma: f32,
     lr: f32,
     device: &B::Device,
+    logger: &mut ReinforceBaselineLogger
 ) -> M
 where
     B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
@@ -44,9 +46,13 @@ where
     let mut score_sum = 0.0f32;
 
     // each episode ---------------------------------------------------------
-    for ep in tqdm!(0..num_episodes) {
-        if ep > 0 && ep % episode_stop == 0 {
-            println!("Mean Score : {:.3}", score_sum / episode_stop as f32);
+    for ep in tqdm!(0..=num_episodes) {
+        if ep % episode_stop == 0 {
+            let mean = score_sum / episode_stop as f32;
+            logger.log(ep, mean);
+            if EXPORT_AT_EP.contains(&ep) {
+                logger.save_model(&model, ep);
+            }
             score_sum = 0.0;
         }
 
@@ -119,7 +125,7 @@ pub fn run_reinforce_baseline<
 
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, N_S, N_A);
     let p = DeepLearningParams::default();
-
+    let mut logger = ReinforceBaselineLogger::new("./data/reinforce_mb", &p);
     let trained = episodic_reinforce_baseline::<N_S, N_A, _, MyAutodiffBackend, Env>(
         model,
         p.num_episodes,
@@ -127,6 +133,7 @@ pub fn run_reinforce_baseline<
         p.gamma,
         p.alpha,  // learning‑rate
         &device,
+        &mut logger
     );
 
     test_trained_model::<N_S, N_A, Env>(&device, trained);

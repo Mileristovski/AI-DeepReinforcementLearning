@@ -137,7 +137,7 @@ fn episodic_mcts<
     let mut env = Env::default();
     let mut total = 0.0;
 
-    for ep in tqdm!(0..params.num_episodes) {
+    for ep in tqdm!(0..=params.num_episodes) {
         if ep > 0 && ep % params.episode_stop == 0 {
             println!("Mean Score : {:.3}", total / params.episode_stop as f32);
             total = 0.0;

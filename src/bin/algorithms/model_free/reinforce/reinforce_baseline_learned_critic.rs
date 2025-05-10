@@ -4,13 +4,14 @@ use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{get_device, log_softmax, masked_softmax, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
 use rand::distributions::Distribution;
 use rand::SeedableRng;
+use crate::services::algorithms::exports::model_free::reinforce::reinforce_baseline_lc::ReinforceLCLogger;
 
 pub fn episodic_actor_critic<
     const NUM_STATE_FEATURES: usize,
@@ -29,6 +30,7 @@ pub fn episodic_actor_critic<
     critic_lr: f32,
     _weight_decay: f32,
     device: &B::Device,
+    logger: &mut ReinforceLCLogger
 ) -> P
 where
     P::InnerModule: Forward<B = B::InnerBackend>,
@@ -44,9 +46,13 @@ where
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut total = 0.0;
 
-    for ep in tqdm!(0..num_episodes) {
-        if ep > 0 && ep % episode_stop == 0 {
-            println!("Mean Score : {:.3}", total / episode_stop as f32);
+    for ep in tqdm!(0..=num_episodes) {
+        if ep % episode_stop == 0 {
+            let mean = total / episode_stop as f32;
+            logger.log(ep, mean);
+            if EXPORT_AT_EP.contains(&ep) {
+                logger.save_model(&policy, ep);
+            }
             total = 0.0;
         }
 
@@ -127,6 +133,7 @@ pub fn run_reinforce_actor_critic<
     let critic = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, 1);
 
     let params = DeepLearningParams::default();
+    let mut logger = ReinforceLCLogger::new("./data/reinforce_lc", &params);
     let trained_policy = episodic_actor_critic::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,
@@ -144,6 +151,7 @@ pub fn run_reinforce_actor_critic<
         params.alpha * 2., // critic lr (for example)
         params.opt_weight_decay_penalty,
         &device,
+        &mut logger,
     );
 
     test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained_policy);

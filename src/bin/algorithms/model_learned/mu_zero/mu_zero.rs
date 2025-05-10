@@ -8,8 +8,9 @@ use rand::prelude::{IteratorRandom, SeedableRng};
 use rand_xoshiro::Xoshiro256PlusPlus;
 use std::fmt::Display;
 
-use crate::config::{DeepLearningParams, MyAutodiffBackend};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, EXPORT_AT_EP};
 use crate::environments::env::DeepDiscreteActionsEnv;
+use crate::services::algorithms::exports::model_learned::mu_zero::mu_zero::MuZeroLogger;
 use crate::services::algorithms::helpers::{log_softmax, run_mcts_pi, get_device, test_trained_model};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
@@ -54,6 +55,7 @@ pub fn episodic_mu_zero<
     c:                 f32,
     _weight_decay:      f32,
     device:            &B::Device,
+    logger: &mut MuZeroLogger
 ) -> M
 where
     B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
@@ -75,7 +77,7 @@ where
     let mut games_count  = 0usize;   // #games so far in current block
 
     // training loop --------------------------------------------------------
-    for ep in tqdm!(0..num_episodes) {
+    for ep in tqdm!(0..=num_episodes) {
         // ── Self‑play block ────────────────────────────────────────────
         for _ in 0..games_per_iter {
             let mut env   = Env::default();
@@ -101,10 +103,13 @@ where
         }
 
         // every episode_stop iters → print true mean and reset -------------
-        if (ep + 1) % episode_stop == 0 {
-            let mean = total_score / games_count as f32;
-            println!("Mean Score : {:.3}", mean);
-            total_score = 0.0; games_count = 0;
+        if ep % episode_stop == 0 {
+            let mean = total_score / episode_stop as f32;
+            logger.log(ep, mean);
+            if EXPORT_AT_EP.contains(&ep) {
+                logger.save_model(&model, ep);
+            }
+            total_score = 0.0;
         }
 
         // ── Network update from replay buffer ────────────────────────────
@@ -159,6 +164,7 @@ pub fn run_mu_zero<
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, N_S, N_A + 2);
 
     let p = DeepLearningParams::default();
+    let mut logger = MuZeroLogger::new("./base/mu_zero", &p);
     let trained = episodic_mu_zero::<N_S, N_A, _, _, Env>(
         model,
         p.num_episodes,
@@ -167,10 +173,11 @@ pub fn run_mu_zero<
         p.mz_batch_size,
         p.mz_games_per_iter,
         p.mcts_simulations,
-        p.policy_lr,
+        p.ac_policy_lr,
         p.mz_c,
         p.opt_weight_decay_penalty,
         &device,
+        &mut logger,
     );
 
     test_trained_model::<N_S, N_A, Env>(&device, trained);
