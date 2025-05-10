@@ -4,12 +4,21 @@ use crate::gui::cli::common::{reset_screen, user_choice};
 use crate::services::envs::run::{run_env_heuristic, run_benchmark_random_agents};
 use crate::algorithms::sarsa::run_episodic_semi_gradient_sarsa;
 use crossterm::terminal::disable_raw_mode;
+use crate::algorithms::alpha_zero::alpha_zero::run_alpha_zero;
+use crate::algorithms::expert_apprentice::expert_apprentice::run_alpha_zero_expert_apprentice;
+use crate::algorithms::monte_carlo_tree_search::uct::run_mcts;
+use crate::algorithms::mu_zero::mu_zero::run_mu_zero;
+use crate::algorithms::mu_zero::mu_zero_stochastic::run_muzero_stochastic;
+use crate::algorithms::ppo::ppo_a2c::run_ppo_a2c;
 use crate::algorithms::q_learning::deep_q_learning::run_deep_q_learning;
 use crate::algorithms::q_learning::double_deep_q_learning::run_double_deep_q_learning;
 use crate::algorithms::q_learning::double_deep_q_learning_with_experience_replay::run_double_deep_q_learning_er;
 use crate::algorithms::q_learning::double_deep_q_learning_with_prioritized_experience_replay::run_double_dqn_per;
 use crate::algorithms::q_learning::tabular_q_learning::run_tabular_q_learning;
+use crate::algorithms::random_rollout::random_rollout::run_random_rollout;
 use crate::algorithms::reinforce::reinforce::run_reinforce;
+use crate::algorithms::reinforce::reinforce_baseline_learned_critic::run_reinforce_actor_critic;
+use crate::algorithms::reinforce::reinforce_mean_baseline::run_reinforce_baseline;
 use crate::environments::env::DeepDiscreteActionsEnv;
 
 pub fn submenu<
@@ -61,6 +70,15 @@ pub fn submenu_drl<
             "Double Deep Q Learning With Experienced Replay",
             "Double Deep Q Learning With Prioritized Experienced Replay",
             "REINFORCE",
+            "REINFORCE with mean baseline",
+            "REINFORCE with Baseline Learned by a Critic ",
+            "PPO A2C",
+            "Monte Carlo Random Rollout",
+            "Monte Carlo Tree Search",
+            "AlphaZero Expert Apprentice",
+            "AlphaZero",
+            "MuZero",
+            "MuZero Stochastic",
             "Back"
         ];
         
@@ -77,7 +95,16 @@ pub fn submenu_drl<
             4 => { run_double_deep_q_learning_er::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
             5 => { run_double_dqn_per::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
             6 => { run_reinforce::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            7 => { break; }
+            7 => { run_reinforce_baseline::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
+            8 => { run_reinforce_actor_critic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
+            9 => { run_ppo_a2c::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
+            10 => { run_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
+            11 => { run_mcts::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name); },
+            12 => { run_alpha_zero_expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
+            13 => { run_alpha_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
+            14 => { run_mu_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
+            15 => { run_muzero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
+            16 => { break; }
             _ => {}
         }
     }

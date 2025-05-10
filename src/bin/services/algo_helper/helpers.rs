@@ -44,13 +44,14 @@ pub fn masked_log_softmax<B: AutodiffBackend>(
     log_softmax(masked_logits)
 }
 
-pub fn log_softmax<B: AutodiffBackend>(logits: Tensor<B, 1>) -> Tensor<B, 1> {
-    let max_val = logits.clone().max();
+pub fn log_softmax<B: AutodiffBackend, const D: usize>(
+    logits: Tensor<B, D>,
+) -> Tensor<B, D> {
+    let max_val = logits.clone().max_dim(D - 1);
     let shifted = logits.clone() - max_val.clone();
     let exp = shifted.exp();
-    let sum_exp = exp.clone().sum();
-    let lse = sum_exp.log().add(max_val);
-    
+    let sum_exp = exp.clone().sum_dim(D - 1);
+    let lse = sum_exp.log() + max_val;
     logits - lse
 }
 
@@ -155,4 +156,129 @@ where
             break 
         }
     }
+}
+
+pub fn split_policy_value<B: Backend, const A: usize>(
+    out: Tensor<B, 1>,
+) -> (Tensor<B, 1>, Tensor<B, 1>) {
+    // policy: entries [0..A)
+    let policy_logits = out.clone().slice([0..A]);
+    // value:   entries [A..A+1)
+    let value_v      = out.slice([A..A + 1]);
+    (policy_logits, value_v)
+}
+
+struct Node<const A: usize> {
+    visits: usize,
+    value: f32,
+    children: [Option<usize>; A],
+    untried: Vec<usize>,
+}
+
+impl<const A: usize> Node<A> {
+    fn new(avail: impl Iterator<Item = usize>) -> Self {
+        let untried = avail.collect::<Vec<_>>();
+        Node {
+            visits: 0,
+            value: 0.0,
+            children: [(); A].map(|_| None),
+            untried,
+        }
+    }
+}
+
+pub fn run_mcts_pi<
+    const S: usize,
+    const A: usize,
+    Env: DeepDiscreteActionsEnv<S, A> + Display + Default + Clone,
+    R: Rng + ?Sized,
+>(
+    root_env: &Env,
+    num_sims: usize,
+    c: f32,
+    rng: &mut R,
+) -> [f32; A] {
+    // tree and corresponding env states
+    let mut tree: Vec<Node<A>> = Vec::new();
+    let mut states: Vec<Env> = Vec::new();
+
+    // create root
+    tree.push(Node::new(root_env.available_actions_ids()));
+    states.push(root_env.clone());
+    let root_id = 0;
+
+    for _ in 0..num_sims {
+        // 1) Selection
+        let mut node = root_id;
+        let mut env = root_env.clone();
+        let mut path = vec![node];
+
+        while tree[node].untried.is_empty() && !env.is_game_over() {
+            // UCT: pick a with max (Q/N + c * sqrt(ln N_parent / N_child))
+            let parent_n = tree[node].visits as f32;
+            let (a, &child_opt) = tree[node]
+                .children
+                .iter()
+                .enumerate()
+                .filter(|&(_, &opt)| opt.is_some())
+                .max_by(|&(a1, _), &(a2, _)| {
+                    let c1 = tree[node].children[a1].unwrap();
+                    let c2 = tree[node].children[a2].unwrap();
+                    let q1 = tree[c1].value / tree[c1].visits as f32;
+                    let q2 = tree[c2].value / tree[c2].visits as f32;
+                    let u1 = q1 + c * (parent_n.ln() / tree[c1].visits as f32).sqrt();
+                    let u2 = q2 + c * (parent_n.ln() / tree[c2].visits as f32).sqrt();
+                    u1.partial_cmp(&u2).unwrap()
+                })
+                .unwrap();
+            let child = child_opt.unwrap();
+            env.step_from_idx(a);
+            node = child;
+            path.push(node);
+        }
+
+        // 2) Expansion
+        if !env.is_game_over() {
+            let a = tree[node].untried.pop().unwrap();
+            env.step_from_idx(a);
+            let new_id = tree.len();
+            tree.push(Node::new(env.available_actions_ids()));
+            states.push(env.clone());
+            tree[node].children[a] = Some(new_id);
+            node = new_id;
+            path.push(node);
+        }
+
+        // 3) Simulation (roll‑out)
+        let mut rollout = env.clone();
+        while !rollout.is_game_over() {
+            let a = rollout.available_actions_ids().choose(rng).unwrap();
+            rollout.step_from_idx(a);
+        }
+        let reward = rollout.score();
+
+        // 4) Backpropagation
+        for &n in &path {
+            tree[n].visits += 1;
+            tree[n].value += reward;
+        }
+    }
+
+    // build π from root’s children visit‐counts
+    let mut pi = [0.0f32; A];
+    let root = &tree[root_id];
+    let total_visits: usize = root
+        .children
+        .iter()
+        .filter_map(|&c| c)
+        .map(|ci| tree[ci].visits)
+        .sum();
+    if total_visits > 0 {
+        for (a, &child_opt) in root.children.iter().enumerate() {
+            if let Some(ci) = child_opt {
+                pi[a] = (tree[ci].visits as f32) / (total_visits as f32);
+            }
+        }
+    }
+    pi
 }
