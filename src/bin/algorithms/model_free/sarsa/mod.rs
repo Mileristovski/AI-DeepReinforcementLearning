@@ -9,8 +9,8 @@ use kdam::tqdm;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
-use crate::services::algo_helper::helpers::{epsilon_greedy_action, get_device, test_trained_model};
-use crate::services::algo_helper::qmlp::{Forward, MyQmlp};
+use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, test_trained_model};
+use crate::services::algorithms::model::{Forward, MyQmlp};
 
 
 pub fn episodic_semi_gradient_sarsa<

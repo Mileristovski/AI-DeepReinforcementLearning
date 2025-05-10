@@ -3,9 +3,9 @@ use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParam
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algo_helper::helpers::{softmax, log_softmax, get_device, test_trained_model};
+use crate::services::algorithms::helpers::{softmax, log_softmax, get_device, test_trained_model};
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
-use crate::services::algo_helper::qmlp::{Forward, MyQmlp};
+use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;

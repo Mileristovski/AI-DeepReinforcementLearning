@@ -1,2 +1,2 @@
-pub mod qmlp;
+pub mod model;
 pub mod helpers;

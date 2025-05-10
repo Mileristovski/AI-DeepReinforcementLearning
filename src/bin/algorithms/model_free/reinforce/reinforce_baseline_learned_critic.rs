@@ -3,35 +3,44 @@ use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParam
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algo_helper::helpers::{get_device, log_softmax, masked_log_softmax, masked_softmax, softmax, test_trained_model};
+use crate::services::algorithms::helpers::{get_device, log_softmax, masked_softmax, test_trained_model};
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
-use crate::services::algo_helper::qmlp::{Forward, MyQmlp};
+use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
 use rand::distributions::Distribution;
 use rand::SeedableRng;
 
-pub fn episodic_reinforce_baseline<
+/// REINFORCE with a critic baseline (episodic actor–critic).
+pub fn episodic_actor_critic<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
-    M: Forward<B = B> + AutodiffModule<B> + Clone,
+    P: Forward<B = B> + AutodiffModule<B> + Clone,  // policy net
+    V: Forward<B = B> + AutodiffModule<B> + Clone,  // value  net
     B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default,
 >(
-    mut model: M,
+    mut policy: P,
+    mut critic: V,
     num_episodes: usize,
     episode_stop: usize,
     gamma: f32,
-    learning_rate: f32,
+    policy_lr: f32,
+    critic_lr: f32,
     device: &B::Device,
-) -> M
+) -> P
 where
-    M::InnerModule: Forward<B = B::InnerBackend>,
+    P::InnerModule: Forward<B = B::InnerBackend>,
+    V::InnerModule: Forward<B = B::InnerBackend>,
 {
-    let mut optimizer = SgdConfig::new()
+    let mut opt_pol = SgdConfig::new()
         .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
         .init();
+    let mut opt_cri = SgdConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
+        .init();
+
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut total_score = 0.0;
 
@@ -55,38 +64,29 @@ where
         let mut s = env.state_description();
 
         while !env.is_game_over() {
-            // 1) forward policy
+            // policy forward
             let s_t = Tensor::<B, 1>::from_floats(s.as_slice(), device);
-            let logits = model.forward(s_t);
-
-            // 2) mask illegal actions by converting the mask-array into a Tensor
-            let mask_arr = env.action_mask();
-            let mask_t = Tensor::<B, 1>::from(mask_arr).to_device(device);
-
-            // 3) get action probabilities
-            let masked_probs = masked_softmax(logits.clone(), mask_t.clone());
-
-            // 4) sample
-            let probs_vec = masked_probs
+            let logits = policy.forward(s_t);
+            let mask_t = Tensor::<B, 1>::from(env.action_mask()).to_device(device);
+            let probs  = masked_softmax(logits, mask_t);            // you can integrate mask if desired
+            let probs_v: Vec<f32> = probs
                 .clone()
                 .into_data()
                 .into_vec::<f32>()
                 .unwrap();
-            let dist = rand::distributions::WeightedIndex::new(&probs_vec).unwrap();
+            let dist = rand::distributions::WeightedIndex::new(&probs_v).unwrap();
             let a = dist.sample(&mut rng);
 
-            // 5) step env
-            let prev_score = env.score();
+            let prev = env.score();
             env.step_from_idx(a);
-            let reward = env.score() - prev_score;
+            let r = env.score() - prev;
             s = env.state_description();
 
-            trajectory.push((s, a, reward));
+            trajectory.push((s, a, r));
         }
-
         total_score += env.score();
 
-        // compute returns Gₜ
+        // compute returns G_t
         let mut returns = Vec::with_capacity(trajectory.len());
         let mut G = 0.0;
         for &(_, _, r) in trajectory.iter().rev() {
@@ -95,29 +95,23 @@ where
         }
         returns.reverse();
 
-        // baseline = mean of episode returns
-        let baseline = returns.iter().sum::<f32>() / returns.len() as f32;
-
-        // policy updates
+        // update both networks
         for ((state, action, _), &G_t) in trajectory.iter().zip(returns.iter()) {
-            let advantage = G_t - baseline;
-
             let s_t = Tensor::<B, 1>::from_floats(state.as_slice(), device);
-            let logits = model.forward(s_t.clone());
+            let v_s = critic.forward(s_t.clone()).slice([0..1]);
+            let loss_cri = (v_s - Tensor::from([G_t]).to_device(device)).powf_scalar(2.0);
+            let grad_cri = loss_cri.backward();
+            let grads_cri = GradientsParams::from_grads(grad_cri, &critic);
+            critic = opt_cri.step(critic_lr.into(), critic, grads_cri);
 
-            // again mask with a tensor
-            let mask_arr = env.action_mask();
-            let mask_t = Tensor::<B, 1>::from(mask_arr).to_device(device);
-
-            // compute log‐prob of chosen action
-            let log_probs = masked_log_softmax(logits, mask_t);
-            let logp = log_probs.slice([*action..action + 1]);
-
-            // gradient ascent on E[log π * (Gₜ – baseline)]
-            let loss = logp.mul_scalar(-advantage);
-            let grad = loss.backward();
-            let grads = GradientsParams::from_grads(grad, &model);
-            model = optimizer.step(learning_rate.into(), model, grads);
+            let baseline = critic.forward(s_t.clone()).slice([0..1]).detach().into_scalar();
+            let advantage = G_t - baseline;
+            let logits = policy.forward(s_t);
+            let logp = log_softmax(logits).slice([*action..action + 1]);
+            let loss_pol = logp.mul_scalar(-advantage);
+            let grad_pol = loss_pol.backward();
+            let grads_pol = GradientsParams::from_grads(grad_pol, &policy);
+            policy = opt_pol.step(policy_lr.into(), policy, grads_pol);
         }
     }
 
@@ -126,10 +120,11 @@ where
         episode_stop,
         total_score / episode_stop as f32
     );
-    model
+    policy
 }
 
-pub fn run_reinforce_baseline<
+/// Convenience runner for actor–critic.
+pub fn run_reinforce_actor_critic<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
@@ -137,25 +132,28 @@ pub fn run_reinforce_baseline<
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
 
-    // policy network
-    let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
+    // policy & critic nets
+    let policy = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
+    let critic = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, 1);
 
-    // hyperparams
     let params = DeepLearningParams::default();
-    let trained = episodic_reinforce_baseline::<
+    let trained_policy = episodic_actor_critic::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,
+        _,
         _,
         MyAutodiffBackend,
         Env,
     >(
-        model,
+        policy,
+        critic,
         params.num_episodes,
         params.episode_stop,
         params.gamma,
-        params.alpha,    // use alpha as policy LR
+        params.alpha,      // policy lr
+        params.alpha * 2., // critic lr (for example)
         &device,
     );
 
-    test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);
+    test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained_policy);
 }

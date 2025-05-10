@@ -5,7 +5,7 @@ use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::config::{DeepLearningParams, MyDevice};
 use crate::environments::env::DeepDiscreteActionsEnv;
-use crate::services::algo_helper::helpers::get_device;
+use crate::services::algorithms::helpers::get_device;
 
 struct Node<const A: usize> {
     visits: usize,

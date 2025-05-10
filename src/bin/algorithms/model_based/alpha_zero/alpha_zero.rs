@@ -5,16 +5,16 @@ use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParam
 use burn::prelude::*;
 use burn::tensor::backend::{AutodiffBackend, Backend};
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algo_helper::helpers::{get_device, log_softmax, test_trained_model};
+use crate::services::algorithms::helpers::{get_device, log_softmax, test_trained_model};
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
-use crate::services::algo_helper::qmlp::{Forward, MyQmlp};
+use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
 use rand::SeedableRng;
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
-use crate::algorithms::monte_carlo_tree_search::uct::mcts_search;
+use crate::algorithms::model_based::monte_carlo::monte_carlo_tree_search_uct::mcts_search;
 
 // bring in only the underlying search kernel, not the CLI runner:
 

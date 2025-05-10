@@ -5,14 +5,14 @@ use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use rand::distributions::WeightedIndex;
 use rand::distributions::Distribution;
-use crate::services::algo_helper::helpers::{run_mcts_pi, log_softmax, get_device, test_trained_model};
+use crate::services::algorithms::helpers::{run_mcts_pi, log_softmax, get_device, test_trained_model};
 use crate::config::{DeepLearningParams, MyAutodiffBackend};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
 use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
-use crate::services::algo_helper::qmlp::{Forward, MyQmlp};
+use crate::services::algorithms::model::{Forward, MyQmlp};
 
 struct ReplayBuffer<T, const N: usize> {
         storage: Vec<T>,

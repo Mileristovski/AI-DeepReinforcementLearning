@@ -11,8 +11,8 @@ use rand::distributions::Distribution;
 
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::environments::env::DeepDiscreteActionsEnv;
-use crate::services::algo_helper::helpers::{get_device, log_softmax, split_policy_value, test_trained_model};
-use crate::services::algo_helper::qmlp::{Forward, MyQmlp};
+use crate::services::algorithms::helpers::{get_device, log_softmax, split_policy_value, test_trained_model};
+use crate::services::algorithms::model::{Forward, MyQmlp};
 use std::fmt::Display;
 
 struct Node<const A: usize> {

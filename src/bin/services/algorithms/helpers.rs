@@ -7,19 +7,15 @@ use rand::{Rng, SeedableRng};
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::config::{MyAutodiffBackend, MyBackend};
-use crate::services::algo_helper::qmlp::{Forward, MyQmlp};
+use crate::services::algorithms::model::{Forward, MyQmlp};
 use burn::tensor::backend::AutodiffBackend;
 use burn::tensor::Tensor;
 
 pub fn softmax<B: AutodiffBackend>(logits: Tensor<B, 1>) -> Tensor<B, 1> {
-    // 1) subtract max for numerical stability
     let max_val = logits.clone().max();
     let shifted = logits - max_val.clone();
-    // 2) exponentiate
     let exp    = shifted.exp();
-    // 3) sum of exps
     let sum    = exp.clone().sum();
-    // 4) normalize
     exp.div(sum)
 }
 
@@ -53,22 +49,6 @@ pub fn log_softmax<B: AutodiffBackend, const D: usize>(
     let sum_exp = exp.clone().sum_dim(D - 1);
     let lse = sum_exp.log() + max_val;
     logits - lse
-}
-
-
-pub fn argmax(row: &Vec<f32>) -> usize {
-    row.iter()
-        .enumerate()
-        .max_by(|x, y| x.1.partial_cmp(y.1).unwrap())
-        .unwrap()
-        .0
-}
-
-
-pub fn max(row: &Vec<f32>) -> f32 {
-    *row.iter()
-        .max_by(|a, b| a.partial_cmp(b).unwrap())
-        .unwrap()
 }
 
 
@@ -161,9 +141,7 @@ where
 pub fn split_policy_value<B: Backend, const A: usize>(
     out: Tensor<B, 1>,
 ) -> (Tensor<B, 1>, Tensor<B, 1>) {
-    // policy: entries [0..A)
     let policy_logits = out.clone().slice([0..A]);
-    // value:   entries [A..A+1)
     let value_v      = out.slice([A..A + 1]);
     (policy_logits, value_v)
 }
@@ -208,13 +186,11 @@ pub fn run_mcts_pi<
     let root_id = 0;
 
     for _ in 0..num_sims {
-        // 1) Selection
         let mut node = root_id;
         let mut env = root_env.clone();
         let mut path = vec![node];
 
         while tree[node].untried.is_empty() && !env.is_game_over() {
-            // UCT: pick a with max (Q/N + c * sqrt(ln N_parent / N_child))
             let parent_n = tree[node].visits as f32;
             let (a, &child_opt) = tree[node]
                 .children
@@ -237,7 +213,6 @@ pub fn run_mcts_pi<
             path.push(node);
         }
 
-        // 2) Expansion
         if !env.is_game_over() {
             let a = tree[node].untried.pop().unwrap();
             env.step_from_idx(a);
@@ -249,7 +224,6 @@ pub fn run_mcts_pi<
             path.push(node);
         }
 
-        // 3) Simulation (roll‑out)
         let mut rollout = env.clone();
         while !rollout.is_game_over() {
             let a = rollout.available_actions_ids().choose(rng).unwrap();
@@ -257,14 +231,12 @@ pub fn run_mcts_pi<
         }
         let reward = rollout.score();
 
-        // 4) Backpropagation
         for &n in &path {
             tree[n].visits += 1;
             tree[n].value += reward;
         }
     }
 
-    // build π from root’s children visit‐counts
     let mut pi = [0.0f32; A];
     let root = &tree[root_id];
     let total_visits: usize = root
