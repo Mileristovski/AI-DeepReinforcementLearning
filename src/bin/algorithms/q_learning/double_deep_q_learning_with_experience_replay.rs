@@ -160,7 +160,7 @@ where
         }
     }
 
-    println!("Mean Score : {:.3}", total_score / 1000.0);
+    println!("Mean Score : {:.3}", total_score / episode_stop as f32);
     model
 }
 

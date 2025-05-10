@@ -178,7 +178,7 @@ where
         if ep % TARGET_UPDATE_EVERY == 0 { target = model.clone(); }
     }
 
-    println!("Mean Score : {:.3}", total_score / 1000.0);
+    println!("Mean Score : {:.3}", total_score / episode_stop as f32);
     model
 }
 
