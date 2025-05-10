@@ -13,6 +13,7 @@ pub fn episodic_tabular_q_learning<
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default,
 >(
     num_episodes: usize,
+    episode_stop: usize,
     gamma: f32,
     alpha: f32,
     start_epsilon: f32,
@@ -23,8 +24,14 @@ pub fn episodic_tabular_q_learning<
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut env = Env::default();
     env.set_against_random();
+    
+    let mut total_score = 0.0;
 
     for ep in 0..num_episodes {
+        if ep > 0 && ep % episode_stop == 0 {
+            println!("Mean Score : {:.3}", total_score / episode_stop as f32);
+            total_score = 0.0;
+        }
         let progress = ep as f32 / num_episodes as f32;
         let eps = (1.0 - progress) * start_epsilon + progress * final_epsilon;
 
@@ -72,6 +79,7 @@ pub fn episodic_tabular_q_learning<
             a = a2;
         }
     }
+    println!("Mean Score : {:.3}", total_score / episode_stop as f32);
 
     q_table
 }
@@ -87,6 +95,7 @@ pub fn run_tabular_q_learning<
     // Train
     let q_table = episodic_tabular_q_learning::<NUM_STATES_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(
         params.num_episodes,
+        params.episode_stop,
         params.gamma,
         params.alpha,
         params.start_epsilon,
