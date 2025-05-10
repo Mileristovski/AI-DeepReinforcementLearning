@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParams};
+use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -27,17 +27,18 @@ pub fn episodic_actor_critic<
     gamma: f32,
     policy_lr: f32,
     critic_lr: f32,
+    weight_decay: f32,
     device: &B::Device,
 ) -> P
 where
     P::InnerModule: Forward<B = B::InnerBackend>,
     V::InnerModule: Forward<B = B::InnerBackend>,
 {
-    let mut opt_pol = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
+    let mut opt_pol = AdamConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
-    let mut opt_cri = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
+    let mut opt_cri = AdamConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();
@@ -141,6 +142,7 @@ pub fn run_reinforce_actor_critic<
         params.gamma,
         params.alpha,      // policy lr
         params.alpha * 2., // critic lr (for example)
+        params.opt_weight_decay_penalty,
         &device,
     );
 

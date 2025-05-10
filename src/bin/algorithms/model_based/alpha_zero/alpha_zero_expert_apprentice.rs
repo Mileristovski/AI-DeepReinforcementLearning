@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParams};
+use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand::distributions::WeightedIndex;
@@ -133,13 +133,14 @@ pub fn episodic_alpha_zero_expert_apprentice<
     apprentice_prob: f32,
     c: f32,
     learning_rate: f32,
+    weight_decay: f32,
     device: &B::Device,
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
 {
-    let mut optimizer = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-4)))
+    let mut optimizer = AdamConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut total_score = 0.0;
@@ -241,6 +242,7 @@ pub fn run_alpha_zero_expert_apprentice<
         params.az_apprentice_prob,
         params.c,
         params.alpha,
+        params.opt_weight_decay_penalty,
         &device,
     );
 

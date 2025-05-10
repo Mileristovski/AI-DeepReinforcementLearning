@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParams};
+use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -24,10 +24,12 @@ pub fn episodic_ppo_a2c<
     mut critic: V,
     num_episodes: usize,
     episode_stop: usize,
+    n_step: usize,
     gamma: f32,
     entropy_coef: f32,
     policy_lr: f32,
     critic_lr: f32,
+    weight_decay: f32,
     device: &B::Device,
 ) -> P
 where
@@ -35,15 +37,17 @@ where
     V::InnerModule: Forward<B = B::InnerBackend>,
 {
     // two separate optimizers
-    let mut opt_pol = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
+    let mut opt_pol = AdamConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
-    let mut opt_cri = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
+    let mut opt_cri = AdamConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut total = 0.0;
+    let mut env = Env::default();
+    env.set_against_random();
 
     for ep in tqdm!(0..num_episodes) {
         // optionally log
@@ -53,8 +57,6 @@ where
         }
 
         // run one episode, collecting up to n_step transitions at a time
-        let mut env = Env::default();
-        env.set_against_random();
         env.reset();
 
         // store (state, action, reward)
@@ -78,7 +80,7 @@ where
             trajectory.push((s, a, r));
             s = s2;
 
-            if trajectory.len() >= episode_stop || env.is_game_over() {
+            if trajectory.len() >= n_step || env.is_game_over() {
                 let mut r = if env.is_game_over() {
                     0.0
                 } else {
@@ -114,11 +116,7 @@ where
         total += env.score();
     }
 
-    println!(
-        "Final mean score (last {} eps): {:.3}",
-        episode_stop,
-        total / episode_stop as f32
-    );
+    println!("Mean Score : {:.3}", total / episode_stop as f32);
     policy
 }
 
@@ -146,11 +144,13 @@ pub fn run_ppo_a2c<
         policy,
         critic,
         params.num_episodes,
+        params.episode_stop,
         params.n_step,
         params.gamma,
         params.entropy_coef,
         params.policy_lr,
         params.critic_lr,
+        params.opt_weight_decay_penalty,
         &device,
     );
 

@@ -1,152 +1,131 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParams};
+use burn::optim::{AdamConfig, GradientsParams, Optimizer};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
-use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algorithms::helpers::{get_device, masked_log_softmax, masked_softmax, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
-use crate::services::algorithms::model::{Forward, MyQmlp};
-use crate::environments::env::DeepDiscreteActionsEnv;
-use std::fmt::Display;
 use kdam::tqdm;
-use rand::distributions::Distribution;
-use rand::SeedableRng;
+use rand::distributions::{Distribution, WeightedIndex};
+use rand::prelude::SeedableRng;
+use rand_xoshiro::Xoshiro256PlusPlus;
+use std::fmt::Display;
 
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
+use crate::environments::env::DeepDiscreteActionsEnv;
+use crate::services::algorithms::helpers::{
+    get_device, masked_log_softmax, masked_softmax, test_trained_model,
+};
+use crate::services::algorithms::model::{Forward, MyQmlp};
+
+// ────────────────────────────────────────────────────────────────────────────
+#[allow(clippy::too_many_arguments)]
 pub fn episodic_reinforce_baseline<
-    const NUM_STATE_FEATURES: usize,
-    const NUM_ACTIONS: usize,
-    M: Forward<B = B> + AutodiffModule<B> + Clone,
-    B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
-    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default,
+    const N_S: usize,
+    const N_A: usize,
+    M,
+    B,
+    Env,
 >(
     mut model: M,
     num_episodes: usize,
     episode_stop: usize,
     gamma: f32,
-    learning_rate: f32,
+    lr: f32,
     device: &B::Device,
 ) -> M
 where
+    B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
+    M: Forward<B = B> + AutodiffModule<B> + Clone,
     M::InnerModule: Forward<B = B::InnerBackend>,
+    Env: DeepDiscreteActionsEnv<N_S, N_A> + Display + Default,
 {
-    let mut optimizer = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
-        .init();
-    let mut rng = Xoshiro256PlusPlus::from_entropy();
-    let mut total = 0.0;
+    let mut opt = AdamConfig::new().init();
+    let mut rng   = Xoshiro256PlusPlus::from_entropy();
+    let mut score_sum = 0.0f32;
 
+    // each episode ---------------------------------------------------------
     for ep in tqdm!(0..num_episodes) {
         if ep > 0 && ep % episode_stop == 0 {
-            println!("Mean Score : {:.3}", total / episode_stop as f32);
-            total = 0.0;
+            println!("Mean Score : {:.3}", score_sum / episode_stop as f32);
+            score_sum = 0.0;
         }
 
-        // collect one episode
         let mut env = Env::default();
         env.set_against_random();
         env.reset();
 
-        let mut trajectory: Vec<([f32; NUM_STATE_FEATURES], usize, f32)> = Vec::new();
-        let mut s = env.state_description();
+        // (state, mask, action, reward) per time‑step ----------------------
+        let mut traj: Vec<([f32; N_S], [f32; N_A], usize, f32)> = Vec::new();
 
         while !env.is_game_over() {
-            // 1) forward policy
-            let s_t = Tensor::<B, 1>::from_floats(s.as_slice(), device);
-            let logits = model.forward(s_t);
-
-            // 2) mask illegal actions by converting the mask-array into a Tensor
+            let s = env.state_description();
             let mask_arr = env.action_mask();
-            let mask_t = Tensor::<B, 1>::from(mask_arr).to_device(device);
 
-            // 3) get action probabilities
-            let masked_probs = masked_softmax(logits.clone(), mask_t.clone());
+            let logits   = model.forward(Tensor::<B, 1>::from_floats(s.as_slice(), device));
+            let mask_t   = Tensor::<B, 1>::from(mask_arr).to_device(device);
+            let probs    = masked_softmax(logits, mask_t);
+            let weights  = probs.into_data().into_vec::<f32>().unwrap();
+            let dist     = WeightedIndex::new(&weights).expect("invalid probs");
+            let a        = dist.sample(&mut rng);
 
-            // 4) sample
-            let probs_vec = masked_probs
-                .clone()
-                .into_data()
-                .into_vec::<f32>()
-                .unwrap();
-            let dist = rand::distributions::WeightedIndex::new(&probs_vec).unwrap();
-            let a = dist.sample(&mut rng);
-
-            // 5) step env
             let prev_score = env.score();
             env.step_from_idx(a);
-            let reward = env.score() - prev_score;
-            s = env.state_description();
+            let r = env.score() - prev_score;
 
-            trajectory.push((s, a, reward));
+            traj.push((s, mask_arr, a, r));
         }
+        score_sum += env.score();
 
-        total += env.score();
-
-        // compute returns Gₜ
-        let mut returns = Vec::with_capacity(trajectory.len());
-        let mut g = 0.0;
-        for &(_, _, r) in trajectory.iter().rev() {
+        // Monte‑Carlo returns ---------------------------------------------
+        let mut returns = Vec::with_capacity(traj.len());
+        let mut g = 0.0f32;
+        for &(_, _, _, r) in traj.iter().rev() {
             g = r + gamma * g;
             returns.push(g);
         }
         returns.reverse();
 
-        // baseline = mean of episode returns
         let baseline = returns.iter().sum::<f32>() / returns.len() as f32;
 
-        // policy updates
-        for ((state, action, _), &g_t) in trajectory.iter().zip(returns.iter()) {
+        // one gradient step per time‑step (could be batched) --------------
+        for ((state, mask_arr, action, _), &g_t) in traj.iter().zip(returns.iter()) {
             let advantage = g_t - baseline;
+            if advantage.abs() < 1e-6 { continue; } // tiny grads – skip
 
-            let s_t = Tensor::<B, 1>::from_floats(state.as_slice(), device);
-            let logits = model.forward(s_t.clone());
-
-            // again mask with a tensor
-            let mask_arr = env.action_mask();
-            let mask_t = Tensor::<B, 1>::from(mask_arr).to_device(device);
-
-            // compute log‐prob of chosen action
+            let logits = model.forward(Tensor::<B, 1>::from_floats(state.as_slice(), device));
+            let mask_t = Tensor::<B, 1>::from(*mask_arr).to_device(device);
             let log_probs = masked_log_softmax(logits, mask_t);
-            let logp = log_probs.slice([*action..action + 1]);
 
-            // gradient ascent on E[log π * (Gₜ – baseline)]
-            let loss = logp.mul_scalar(-advantage);
-            let grad = loss.backward();
-            let grads = GradientsParams::from_grads(grad, &model);
-            model = optimizer.step(learning_rate.into(), model, grads);
+            let logp = log_probs.clone().slice([*action .. (*action + 1)]);
+            let loss = logp.mul_scalar(-advantage); // minimise –advantage * log π
+
+            let grads = GradientsParams::from_grads(loss.backward(), &model);
+            model = opt.step(lr.into(), model, grads);
         }
     }
 
-    println!("Mean Score : {:.3}", total / (episode_stop as f32));
+    println!("Mean Score : {:.3}", score_sum / episode_stop as f32);
     model
 }
 
+// ────────────────────────────────────────────────────────────────────────────
 pub fn run_reinforce_baseline<
-    const NUM_STATE_FEATURES: usize,
-    const NUM_ACTIONS: usize,
-    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
+    const N_S: usize,
+    const N_A: usize,
+    Env: DeepDiscreteActionsEnv<N_S, N_A> + Display,
 >() {
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
 
-    // policy network
-    let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
+    let model = MyQmlp::<MyAutodiffBackend>::new(&device, N_S, N_A);
+    let p = DeepLearningParams::default();
 
-    // hyperparams
-    let params = DeepLearningParams::default();
-    let trained = episodic_reinforce_baseline::<
-        NUM_STATE_FEATURES,
-        NUM_ACTIONS,
-        _,
-        MyAutodiffBackend,
-        Env,
-    >(
+    let trained = episodic_reinforce_baseline::<N_S, N_A, _, MyAutodiffBackend, Env>(
         model,
-        params.num_episodes,
-        params.episode_stop,
-        params.gamma,
-        params.alpha,    // use alpha as policy LR
+        p.num_episodes,
+        p.episode_stop,
+        p.gamma,
+        p.alpha,  // learning‑rate
         &device,
     );
 
-    test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);
+    test_trained_model::<N_S, N_A, Env>(&device, trained);
 }

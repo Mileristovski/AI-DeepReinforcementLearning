@@ -25,12 +25,12 @@ pub fn episodic_tabular_q_learning<
     let mut env = Env::default();
     env.set_against_random();
     
-    let mut total_score = 0.0;
+    let mut total = 0.0;
 
     for ep in 0..num_episodes {
         if ep > 0 && ep % episode_stop == 0 {
-            println!("Mean Score : {:.3}", total_score / episode_stop as f32);
-            total_score = 0.0;
+            println!("Mean Score : {:.3}", total / episode_stop as f32);
+            total = 0.0;
         }
         let progress = ep as f32 / num_episodes as f32;
         let eps = (1.0 - progress) * start_epsilon + progress * final_epsilon;
@@ -77,9 +77,11 @@ pub fn episodic_tabular_q_learning<
 
             s = s2;
             a = a2;
+            
         }
+        total += env.score();
     }
-    println!("Mean Score : {:.3}", total_score / episode_stop as f32);
+    println!("Mean Score : {:.3}", total / episode_stop as f32);
     q_table
 }
 

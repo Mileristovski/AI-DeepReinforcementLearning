@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::io;
 use kdam::tqdm;
 use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
@@ -23,40 +24,6 @@ impl<const A: usize> Node<A> {
             children: [(); A].map(|_| None),
             untried,
         }
-    }
-}
-
-pub fn run_mcts<
-    const S: usize,
-    const A: usize,
-    Env: DeepDiscreteActionsEnv<S, A> + Display + Default + Clone,
->(
-    env_name: &str,
-) {
-    let params = DeepLearningParams::default();
-    let mut env = Env::default();
-    let _device: MyDevice = get_device();
-    println!("Using device: {:?}", _device);
-    println!("Running MCTS on {} with {} sims, c={}", env_name, params.mcts_simulations, params.mcts_c);
-
-    let mut rng = Xoshiro256PlusPlus::from_entropy();
-    let mut total = 0.0;
-    
-    for ep in tqdm!(0..params.num_episodes) {
-        if ep > 0 && ep % params.episode_stop == 0 {
-            println!("Mean Score : {:.3}", total / params.episode_stop as f32);
-            total = 0.0;
-        }
-        env.reset();
-        env.set_against_random();
-
-        while !env.is_game_over() {
-            // perform MCTS from current root state
-            let action = mcts_search(&env, params.mcts_simulations, params.mcts_c, &mut rng);
-            env.step_from_idx(action);
-        }
-        println!("{}", env);
-        total += env.score();
     }
 }
 
@@ -146,4 +113,87 @@ where
         })
         .map(|(a, _)| a)
         .unwrap()
+}
+
+fn episodic_mcts<
+    const S: usize,
+    const A: usize,
+    Env: DeepDiscreteActionsEnv<S, A> + Display + Default + Clone,
+>(
+    params: &DeepLearningParams,
+    env_name: &str,
+    rng: &mut Xoshiro256PlusPlus,
+) where
+    [(); S]:,
+    [(); A]:,
+{
+    println!("Running MCTS on {} with {} sims, c={}", env_name, params.mcts_simulations, params.mcts_c);
+
+    let mut env = Env::default();
+    let mut total = 0.0;
+
+    for ep in tqdm!(0..params.num_episodes) {
+        if ep > 0 && ep % params.episode_stop == 0 {
+            println!("Mean Score : {:.3}", total / params.episode_stop as f32);
+            total = 0.0;
+        }
+        env.reset();
+        env.set_against_random();
+
+        while !env.is_game_over() {
+            let action = mcts_search(&env, params.mcts_simulations, params.mcts_c, rng);
+            env.step_from_idx(action);
+        }
+        total += env.score();
+    }
+}
+
+/// “Test” episodes in a loop, prompting user to press Enter or “quit”
+fn test_mcts<
+    const S: usize,
+    const A: usize,
+    Env: DeepDiscreteActionsEnv<S, A> + Display + Default + Clone,
+>(
+    params: &DeepLearningParams,
+    rng: &mut Xoshiro256PlusPlus,
+) where
+    [(); S]:,
+    [(); A]:,
+{
+    loop {
+        let mut env = Env::default();
+        env.set_against_random();
+        env.reset();
+
+        println!("\n--- Test Episode ---\n");
+        while !env.is_game_over() {
+            let action = mcts_search(&env, params.mcts_simulations, params.mcts_c, rng);
+            env.step_from_idx(action);
+        }
+        let score = env.score();
+        println!("\nFinal state:\n{}\nScore: {}", env, score);
+        println!("Press Enter to run another test, or type 'quit' to return.");
+        let mut buf = String::new();
+        io::stdin().read_line(&mut buf).unwrap();
+        if buf.trim().eq_ignore_ascii_case("quit") {
+            break;
+        }
+    }
+}
+
+/// entry point: first training, then interactive testing — just like random rollout
+pub fn run_mcts<
+    const S: usize,
+    const A: usize,
+    Env: DeepDiscreteActionsEnv<S, A> + Display + Default + Clone,
+>(
+    env_name: &str,
+) {
+    let params = DeepLearningParams::default();
+    let _device: MyDevice = get_device();
+    println!("Using device: {:?}", _device);
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(params.rng_seed);
+
+    episodic_mcts::<S, A, Env>(&params, env_name, &mut rng);
+    test_mcts::<S, A, Env>(&params, &mut rng);
 }

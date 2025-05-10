@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParams};
+use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -52,13 +52,14 @@ pub fn episodic_mu_zero_stochastic<
     c: f32,
     replay_cap: usize,
     batch_size: usize,
+    weight_decay:      f32,
     device: &B::Device,
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
 {
-    let mut optimizer = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-4)))
+    let mut optimizer = AdamConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
 
     let mut buffer = ReplayBuffer::<([f32; HS], [f32; A], f32)>::new(replay_cap);
@@ -68,7 +69,7 @@ where
     
     for _iter in tqdm!(0..num_episodes) {
         if _iter > 0 && _iter % episode_stop == 0 {
-            println!("Mean Score : {:.3}", total / episode_stop as f32);
+            println!("Mean Score : {:.3}", total / (episode_stop * games_per_iter) as f32);
             total = 0.0;
         }
         for _ in 0..games_per_iter {
@@ -179,6 +180,7 @@ pub fn run_muzero_stochastic<
         params.mz_c,
         params.mz_replay_cap,
         params.mz_batch_size,
+        params.opt_weight_decay_penalty,
         &device,
     );
 

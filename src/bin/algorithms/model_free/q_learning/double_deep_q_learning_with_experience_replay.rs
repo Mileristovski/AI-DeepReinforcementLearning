@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParams};
+use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -56,6 +56,7 @@ pub fn episodic_double_deep_q_learning_er<
     minus_one: &Tensor<B, 1>,
     plus_one:  &Tensor<B, 1>,
     fmin_vec:  &Tensor<B, 1>,
+    weight_decay: f32,
     device: &B::Device,
 ) -> M
 where
@@ -67,18 +68,18 @@ where
 
     let mut target = model.clone();
     let mut buffer = ReplayBuffer::<[f32; NUM_STATE_FEATURES], REPLAY_CAPACITY>::new();
-    let mut optimizer = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
+    let mut optimizer = AdamConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
     let mut rng = Xoshiro256PlusPlus::from_entropy();
-    let mut total_score = 0.0;
+    let mut total = 0.0;
 
     // wrap episodes in tqdm for progress bar
     for ep in tqdm!(0..num_episodes) {
         // every 100 episodes, print mean score
         if ep > 0 && ep % episode_stop == 0 {
-            println!("Episode {:>5}/{}, Mean Score: {:.3}", ep, num_episodes, total_score / episode_stop as f32);
-            total_score = 0.0;
+            println!("Mean Score : {:.3}", total / episode_stop as f32);
+            total = 0.0;
         }
 
         let eps = (1.0 - ep as f32 / num_episodes as f32) * start_epsilon
@@ -153,14 +154,14 @@ where
             }
         }
 
-        total_score += env.score();
+        total += env.score();
 
         if ep % TARGET_UPDATE_EVERY == 0 {
             target = model.clone();
         }
     }
 
-    println!("Mean Score : {:.3}", total_score / episode_stop as f32);
+    println!("Mean Score : {:.3}", total / episode_stop as f32);
     model
 }
 
@@ -197,6 +198,7 @@ pub fn run_double_deep_q_learning_er<
         &minus_one,
         &plus_one,
         &fmin_vec,
+        params.opt_weight_decay_penalty,
         &device,
     );
 

@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParams};
+use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -24,13 +24,14 @@ pub fn episodic_reinforce<
     episode_stop: usize,
     gamma: f32,
     learning_rate: f32,
+    weight_decay: f32,
     device: &B::Device,
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
 {
-    let mut optimizer = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
+    let mut optimizer = AdamConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();
@@ -135,6 +136,7 @@ pub fn run_reinforce<
         params.episode_stop,
         params.gamma,
         params.alpha, 
+        params.opt_weight_decay_penalty,
         &device,
     );
 

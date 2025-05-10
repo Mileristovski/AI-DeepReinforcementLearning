@@ -76,20 +76,18 @@ fn episodic_random_rollout<
     [(); NUM_STATE_FEATURES]:,
     [(); NUM_ACTIONS]:,
 {
-    let mut total_score = 0.0;
+    let mut total = 0.0;
     let mut env = Env::default();
     env.set_against_random();
+    
 
     for ep in tqdm!(0..num_episodes) {
-        env.reset();
-        total_score += run_episode(&mut env, rollouts_per_action, rng);
-
-        if (ep + 1) % episode_stop == 0 {
-            if ep > 0 && ep % episode_stop == 0 {
-                println!("Mean Score : {:.3}", total_score / episode_stop as f32);
-                total_score = 0.0;
-            }
+        if ep > 0 && ep % episode_stop == 0 {
+            println!("Mean Score : {:.3}", total / episode_stop as f32);
+            total = 0.0;
         }
+        env.reset();
+        total += run_episode(&mut env, rollouts_per_action, rng);
     }
 }
 

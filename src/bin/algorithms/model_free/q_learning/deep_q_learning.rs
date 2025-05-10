@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParams};
+use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -28,14 +28,15 @@ pub fn episodic_deep_q_learning<
     minus_one: &Tensor<B, 1>,
     plus_one:  &Tensor<B, 1>,
     fmin_vec:  &Tensor<B, 1>,
+    weight_decay: f32,
     device: &B::Device,
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
 {
     let mut target = online.clone();
-    let mut optimizer = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
+    let mut optimizer = AdamConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut total_score = 0.0;
@@ -138,6 +139,7 @@ pub fn run_deep_q_learning<
         &minus_one,
         &plus_one,
         &fmin_vec,
+        params.opt_weight_decay_penalty,
         &device,
     );
 

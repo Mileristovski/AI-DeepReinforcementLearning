@@ -1,7 +1,7 @@
 // --- alpha_zero.rs ---
 
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParams};
+use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::{AutodiffBackend, Backend};
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -89,13 +89,14 @@ pub fn episodic_alpha_zero<
     games_per_iteration: usize,
     // mcts_sims: usize,
     learning_rate: f32,
+    weight_decay: f32,
     device: &B::Device,
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
 {
-    let mut optimizer = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-4)))
+    let mut optimizer = AdamConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();
@@ -177,6 +178,7 @@ pub fn run_alpha_zero<
         params.az_self_play_games,
         // params.mcts_simulations,
         params.alpha,
+        params.opt_weight_decay_penalty,
         &device,
     );
 

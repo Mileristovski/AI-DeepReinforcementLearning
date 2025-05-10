@@ -2,7 +2,7 @@ use std::fmt::Display;
 use crate::environments::env::DeepDiscreteActionsEnv;
 use burn::module::AutodiffModule;
 use burn::optim::decay::WeightDecayConfig;
-use burn::optim::{GradientsParams, Optimizer, SgdConfig};
+use burn::optim::{AdamConfig, GradientsParams, Optimizer};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use kdam::tqdm;
@@ -31,12 +31,13 @@ pub fn episodic_semi_gradient_sarsa<
     minus_one: &Tensor<B, 1>,
     plus_one:  &Tensor<B, 1>,
     fmin_vec:  &Tensor<B, 1>,
+    weight_decay: f32,
     device: &B::Device) -> M
 where
     M::InnerModule: Forward<B=B::InnerBackend>,
 {
-    let mut optimizer = SgdConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
+    let mut optimizer = AdamConfig::new()
+        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();
@@ -50,7 +51,7 @@ where
         let decayed_epsilon = (1.0 - progress) * start_epsilon + progress * final_epsilon;
 
         if ep_id % episode_stop == 0 {
-            println!("Mean Score: {}", total_score / episode_stop as f32);
+            println!("Mean Score: {:.3}", total_score / episode_stop as f32);
             total_score = 0.0;
         }
         env.reset();
@@ -121,7 +122,7 @@ where
         }
         total_score += env.score();
     }
-    println!("Mean Score: {}", total_score / episode_stop as f32);
+    println!("Mean Score : {:.3}", total_score / episode_stop as f32);
     model
 }
 
@@ -166,6 +167,7 @@ pub fn run_episodic_semi_gradient_sarsa<
             &minus_one,
             &plus_one,
             &fmin_vec,
+            parameters.opt_weight_decay_penalty,
             &device,
         );
 

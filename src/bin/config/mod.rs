@@ -1,6 +1,5 @@
 use burn::backend::{Autodiff, LibTorch};
 use burn::prelude::Backend;
-
 /**
 * -------------------------------------------------------------------------
 * BACKEND AND DEVICE INITIALIZATION
@@ -9,7 +8,6 @@ use burn::prelude::Backend;
 pub type MyBackend = LibTorch;
 pub type MyAutodiffBackend = Autodiff<MyBackend>;
 pub type MyDevice = <MyBackend as Backend>::Device;
-
 
 /**
 * -------------------------------------------------------------------------
@@ -49,10 +47,10 @@ pub struct DeepLearningParams {
     pub mcts_c: f32,
 
     // AlphaZero‑specific
-    pub az_iterations: usize,         // outer training loop (“700k” in paper)
-    pub az_self_play_games: usize,    // self‑play games per iteration
-    // pub az_batch_size: usize,         // how many positions to batch‐train on
-    // pub az_weight_decay: f32,         // L2 reg on θ
+    pub az_iterations: usize,        
+    pub az_self_play_games: usize,   
+    // pub az_batch_size: usize,     
+    // pub az_weight_decay: f32,     
     pub az_apprentice_prob: f32,
     pub c: f32,
     
@@ -61,7 +59,9 @@ pub struct DeepLearningParams {
     pub mz_replay_cap: usize,
     pub mz_batch_size: usize,
     pub mz_c: f32,
-    pub mz_weight_decay_penalty: f32,
+    
+    // Optimiser
+    pub opt_weight_decay_penalty: f32,
 
     // RNG
     pub rng_seed: u64,
@@ -71,7 +71,7 @@ impl Default for DeepLearningParams {
     fn default() -> Self {
         Self {
             num_episodes: 10_000,
-            episode_stop: 1_000,
+            episode_stop: 1000,
             start_epsilon: 1.0,
             final_epsilon: 1e-5,
             
@@ -104,7 +104,9 @@ impl Default for DeepLearningParams {
             mz_replay_cap: 100_000,
             mz_batch_size: 256,
             mz_c: 1.0,
-            mz_weight_decay_penalty: 1e-4,
+            
+            // Optimiser settings Adam
+            opt_weight_decay_penalty: 1e-4,
             
             // RNG
             rng_seed: 172_848_556_3,

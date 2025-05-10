@@ -3,8 +3,7 @@ use std::io;
 use burn::module::AutodiffModule;
 use burn::prelude::*;
 use rand::prelude::IteratorRandom;
-use rand::{Rng, SeedableRng};
-use rand_xoshiro::Xoshiro256PlusPlus;
+use rand::Rng;
 use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::config::{MyAutodiffBackend, MyBackend};
 use crate::services::algorithms::model::{Forward, MyQmlp};
@@ -90,7 +89,7 @@ pub fn test_trained_model<
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default,
 >(
     device: &<MyBackend as Backend>::Device,
-    model: MyQmlp<MyAutodiffBackend>,
+    model:  MyQmlp<MyAutodiffBackend>,
 )
 where
     MyQmlp<MyBackend>: Forward<B = MyBackend>,
@@ -99,9 +98,7 @@ where
     let mut env = Env::default();
     env.set_against_random();
 
-    let mut rng = Xoshiro256PlusPlus::from_entropy();
-    let minus_one = Tensor::<MyBackend, 1>::from_floats([-1.0; NUM_ACTIONS], device);
-    let plus_one  = Tensor::<MyBackend, 1>::from_floats([ 1.0; NUM_ACTIONS], device);
+    // precompute a vector of -INF for masked-out policy
     let fmin_vec  = Tensor::<MyBackend, 1>::from_floats([f32::MIN; NUM_ACTIONS], device);
 
     loop {
@@ -111,29 +108,25 @@ where
 
             let s_tensor = Tensor::<MyBackend, 1>::from_floats(env.state_description().as_slice(), device);
             let mask_tensor = Tensor::<MyBackend, 1>::from(env.action_mask()).to_device(device);
-            
-            let q_s: Tensor<MyBackend, 1> = valid_model.forward(s_tensor);
 
-            let a = epsilon_greedy_action::<MyBackend, NUM_STATE_FEATURES, NUM_ACTIONS>(
-                &q_s,
-                &mask_tensor,
-                &minus_one,
-                &plus_one,
-                &fmin_vec,
-                env.available_actions_ids(),
-                1e-5,
-                &mut rng,
-            );
+            let out = valid_model.forward(s_tensor);
+
+            // ALWAYS slice only the first NUM_ACTIONS entries as policy logits
+            let policy_logits = out.clone().slice([0..NUM_ACTIONS]);
+
+            // pick greedily from the policy head
+            let a = greedy_policy_action::<MyBackend>(&policy_logits, &mask_tensor, &fmin_vec);
+
             env.step_from_idx(a);
         }
 
         println!("{}", env);
         println!("Press Enter to continue or 'quit' to quit");
-        
+
         let mut buf = String::new();
         io::stdin().read_line(&mut buf).unwrap();
-        if buf.trim().eq_ignore_ascii_case("quit")  {  
-            break 
+        if buf.trim().eq_ignore_ascii_case("quit") {
+            break;
         }
     }
 }
@@ -253,4 +246,14 @@ pub fn run_mcts_pi<
         }
     }
     pi
+}
+
+pub fn greedy_policy_action<B: Backend<FloatElem = f32, IntElem = i64>>(
+    policy_logits:  &Tensor<B, 1>,
+    mask_tensor:    &Tensor<B, 1>,
+    fmin_vec:       &Tensor<B, 1>,
+) -> usize {
+    let masked = policy_logits.clone() * mask_tensor.clone()
+        + (mask_tensor.clone().mul_scalar(-1.0).add_scalar(1.0)) * fmin_vec.clone();
+    masked.argmax(0).into_scalar() as usize
 }
