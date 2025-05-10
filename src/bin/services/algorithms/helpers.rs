@@ -214,12 +214,12 @@ pub fn run_mcts_pi<
         }
 
         if !env.is_game_over() {
-            let a = tree[node].untried.pop().unwrap();
-            env.step_from_idx(a);
+            let a_mcts = tree[node].untried.pop().unwrap();
+            env.step_from_idx(a_mcts);
             let new_id = tree.len();
             tree.push(Node::new(env.available_actions_ids()));
             states.push(env.clone());
-            tree[node].children[a] = Some(new_id);
+            tree[node].children[a_mcts] = Some(new_id);
             node = new_id;
             path.push(node);
         }

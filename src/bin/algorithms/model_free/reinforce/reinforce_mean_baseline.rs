@@ -3,7 +3,7 @@ use burn::optim::{Optimizer, SgdConfig, decay::WeightDecayConfig, GradientsParam
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algorithms::helpers::{get_device, log_softmax, masked_log_softmax, masked_softmax, softmax, test_trained_model};
+use crate::services::algorithms::helpers::{get_device, masked_log_softmax, masked_softmax, test_trained_model};
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
@@ -33,17 +33,12 @@ where
         .with_weight_decay(Some(WeightDecayConfig::new(1e-7)))
         .init();
     let mut rng = Xoshiro256PlusPlus::from_entropy();
-    let mut total_score = 0.0;
+    let mut total = 0.0;
 
     for ep in tqdm!(0..num_episodes) {
         if ep > 0 && ep % episode_stop == 0 {
-            println!(
-                "Ep {:>4}/{}  mean score {:.3}",
-                ep,
-                num_episodes,
-                total_score / episode_stop as f32
-            );
-            total_score = 0.0;
+            println!("Mean Score : {:.3}", total / episode_stop as f32);
+            total = 0.0;
         }
 
         // collect one episode
@@ -84,14 +79,14 @@ where
             trajectory.push((s, a, reward));
         }
 
-        total_score += env.score();
+        total += env.score();
 
         // compute returns Gₜ
         let mut returns = Vec::with_capacity(trajectory.len());
-        let mut G = 0.0;
+        let mut g = 0.0;
         for &(_, _, r) in trajectory.iter().rev() {
-            G = r + gamma * G;
-            returns.push(G);
+            g = r + gamma * g;
+            returns.push(g);
         }
         returns.reverse();
 
@@ -99,8 +94,8 @@ where
         let baseline = returns.iter().sum::<f32>() / returns.len() as f32;
 
         // policy updates
-        for ((state, action, _), &G_t) in trajectory.iter().zip(returns.iter()) {
-            let advantage = G_t - baseline;
+        for ((state, action, _), &g_t) in trajectory.iter().zip(returns.iter()) {
+            let advantage = g_t - baseline;
 
             let s_t = Tensor::<B, 1>::from_floats(state.as_slice(), device);
             let logits = model.forward(s_t.clone());
@@ -121,11 +116,7 @@ where
         }
     }
 
-    println!(
-        "Final mean score (last {} eps): {:.3}",
-        episode_stop,
-        total_score / episode_stop as f32
-    );
+    println!("Mean Score : {:.3}", total / (episode_stop as f32));
     model
 }
 

@@ -14,7 +14,6 @@ use kdam::tqdm;
 use rand::SeedableRng;
 use rand::distributions::WeightedIndex;
 use rand::prelude::Distribution;
-use crate::algorithms::model_based::monte_carlo::monte_carlo_tree_search_uct::mcts_search;
 
 // bring in only the underlying search kernel, not the CLI runner:
 
@@ -33,13 +32,10 @@ fn split_policy_value<B: Backend>(
 fn run_mcts_policy<
     const S: usize,
     const A: usize,
-    Env: DeepDiscreteActionsEnv<S, A> + Clone,
-    R: rand::Rng + ?Sized,
+    Env: DeepDiscreteActionsEnv<S, A> + Clone
 >(
     root_env: &Env,
-    num_sims: usize,
-    c: f32,
-    rng: &mut R,
+    // num_sims: usize
 ) -> [f32; A] {
     #[derive(Clone)]
     struct Node<const A: usize> { visits: usize, children: [Option<usize>; A] }
@@ -52,11 +48,9 @@ fn run_mcts_policy<
     tree.push(root_node.clone());
     states.push(root_env.clone());
 
-    for _ in 0..num_sims {
+    /*for _ in 0..num_sims {
         let node = root_id;
-        let env = root_env.clone();
-        let path = vec![node];
-    }
+    }*/
 
     let mut visits = [0f32; A];
     let root = &tree[root_id];
@@ -93,8 +87,7 @@ pub fn episodic_alpha_zero<
     num_iterations: usize,
     episode_stop: usize,
     games_per_iteration: usize,
-    mcts_sims: usize,
-    gamma: f32,
+    // mcts_sims: usize,
     learning_rate: f32,
     device: &B::Device,
 ) -> M
@@ -122,11 +115,9 @@ where
             let mut trajectory = Vec::new();
             while !env.is_game_over() {
                 let s = env.state_description();
-                let pi = run_mcts_policy::<NUM_STATE_FEATURES, NUM_ACTIONS, Env, _>(
+                let pi = run_mcts_policy::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(
                     &env,
-                    mcts_sims,
-                    /* c = */ 1.4,
-                    &mut rng,
+                    // mcts_sims
                 );
                 let a = sample_from(pi, &mut rng);
                 trajectory.push((s, pi, a));
@@ -184,9 +175,8 @@ pub fn run_alpha_zero<
         params.az_iterations,
         params.episode_stop,
         params.az_self_play_games,
-        params.mcts_simulations,
-        params.gamma,
-        params.alpha,            // network LR
+        // params.mcts_simulations,
+        params.alpha,
         &device,
     );
 

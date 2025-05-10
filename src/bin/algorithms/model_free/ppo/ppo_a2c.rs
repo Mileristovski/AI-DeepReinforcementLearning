@@ -23,7 +23,7 @@ pub fn episodic_ppo_a2c<
     mut policy: P,
     mut critic: V,
     num_episodes: usize,
-    n_step: usize,
+    episode_stop: usize,
     gamma: f32,
     entropy_coef: f32,
     policy_lr: f32,
@@ -43,18 +43,13 @@ where
         .init();
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();
-    let mut total_score = 0.0;
+    let mut total = 0.0;
 
     for ep in tqdm!(0..num_episodes) {
         // optionally log
-        if ep > 0 && ep % n_step == 0 {
-            println!(
-                "Ep {:>4}/{}  mean score {:.3}",
-                ep,
-                num_episodes,
-                total_score / n_step as f32
-            );
-            total_score = 0.0;
+        if ep > 0 && ep % episode_stop == 0 {
+            println!("Mean Score : {:.3}", total / episode_stop as f32);
+            total = 0.0;
         }
 
         // run one episode, collecting up to n_step transitions at a time
@@ -83,32 +78,26 @@ where
             trajectory.push((s, a, r));
             s = s2;
 
-            // once we have n_step or terminal, do updates
-            if trajectory.len() >= n_step || env.is_game_over() {
-                // compute n‑step return R
-                let mut R = if env.is_game_over() {
+            if trajectory.len() >= episode_stop || env.is_game_over() {
+                let mut r = if env.is_game_over() {
                     0.0
                 } else {
-                    // bootstrap from critic
                     let s_tn = Tensor::<B, 1>::from_floats(s.as_slice(), device);
                     critic.forward(s_tn).slice([0..1]).into_scalar()
                 };
 
-                // go backwards through the collected transitions
                 for &(state, action, reward) in trajectory.iter().rev() {
-                    R = reward + gamma * R;
+                    r = reward + gamma * r;
 
-                    // --- critic update: minimize (V(s) − R)²
                     let s_tc = Tensor::<B, 1>::from_floats(state.as_slice(), device);
                     let v_s = critic.forward(s_tc.clone()).slice([0..1]);
-                    let loss_cri = (v_s - Tensor::from([R]).to_device(device)).powf_scalar(2.0);
+                    let loss_cri = (v_s - Tensor::from([r]).to_device(device)).powf_scalar(2.0);
                     let grad_cri = loss_cri.backward();
                     let grads_cri = GradientsParams::from_grads(grad_cri, &critic);
                     critic = opt_cri.step(critic_lr.into(), critic, grads_cri);
 
-                    // --- policy update: ∇ log π(a|s) * (R − V(s)) + entropy bonus
                     let baseline = critic.forward(s_tc.clone()).slice([0..1]).detach().into_scalar();
-                    let advantage = R - baseline;
+                    let advantage = r - baseline;
                     let logits_p = policy.forward(s_tc);
                     let logp = log_softmax(logits_p.clone()).slice([action..action+1]);
                     let entropy = - (softmax(logits_p.clone()) * log_softmax(logits_p)).sum();
@@ -122,13 +111,13 @@ where
             }
         }
 
-        total_score += env.score();
+        total += env.score();
     }
 
     println!(
         "Final mean score (last {} eps): {:.3}",
-        n_step,
-        total_score / n_step as f32
+        episode_stop,
+        total / episode_stop as f32
     );
     policy
 }
@@ -141,9 +130,7 @@ pub fn run_ppo_a2c<
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
 
-    // policy net: outputs NUM_ACTIONS logits
     let policy = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
-    // critic net: outputs single state‑value
     let critic = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, 1);
 
     // hyperparameters

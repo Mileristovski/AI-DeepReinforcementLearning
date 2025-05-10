@@ -15,19 +15,20 @@ use rand_xoshiro::rand_core::SeedableRng;
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
 
-struct ReplayBuffer<T, const N: usize> {
+struct ReplayBuffer<T> {
     storage: Vec<T>,
     pos: usize,
+    n: usize,
 }
-impl<T: Clone, const N: usize> ReplayBuffer<T, N> {
-    fn new() -> Self { Self { storage: Vec::with_capacity(N), pos: 0 } }
+impl<T: Clone> ReplayBuffer<T> {
+    fn new(n: usize) -> Self { Self { storage: Vec::with_capacity(n), pos: 0, n } }
     fn push(&mut self, item: T) {
-        if self.storage.len() < N {
+        if self.storage.len() < self.n {
             self.storage.push(item);
         } else {
             self.storage[self.pos] = item;
         }
-        self.pos = (self.pos + 1) % N;
+        self.pos = (self.pos + 1) % self.n;
     }
     fn sample_batch(&self, batch_size: usize) -> Vec<T> {
         let mut rng = Xoshiro256PlusPlus::from_entropy();
@@ -35,7 +36,6 @@ impl<T: Clone, const N: usize> ReplayBuffer<T, N> {
     }
 }
 
-/// Stochastic MuZero: latent state is Gaussian.  We add a KL term pushing (μ,σ)→N(0,I).
 pub fn episodic_mu_zero_stochastic<
     const HS: usize,     // history length × state_dim
     const A: usize,
@@ -45,10 +45,13 @@ pub fn episodic_mu_zero_stochastic<
 >(
     mut model: M,
     num_episodes: usize,
+    episode_stop: usize,
     games_per_iter: usize,
     mcts_sims: usize,
-    gamma: f32,
     learning_rate: f32,
+    c: f32,
+    replay_cap: usize,
+    batch_size: usize,
     device: &B::Device,
 ) -> M
 where
@@ -58,14 +61,16 @@ where
         .with_weight_decay(Some(WeightDecayConfig::new(1e-4)))
         .init();
 
-    const REPLAY_CAP: usize = 100_000;
-    const BATCH_SIZE: usize = 256;
-    let mut buffer = ReplayBuffer::<([f32; HS], [f32; A], f32), REPLAY_CAP>::new();
+    let mut buffer = ReplayBuffer::<([f32; HS], [f32; A], f32)>::new(replay_cap);
     let mut rng = Xoshiro256PlusPlus::from_entropy();
-    let mut history: [f32; HS] = [0.0; HS];
-
+    let mut history: [f32; HS];
+    let mut total = 0.0;
+    
     for _iter in tqdm!(0..num_episodes) {
-        // self‑play
+        if _iter > 0 && _iter % episode_stop == 0 {
+            println!("Mean Score : {:.3}", total / episode_stop as f32);
+            total = 0.0;
+        }
         for _ in 0..games_per_iter {
             let mut env = Env::default();
             env.set_against_random();
@@ -78,7 +83,7 @@ where
                 let pi_root: [f32; A] = run_mcts_pi::<HS, A, Env, _>(
                     &env,
                     mcts_sims,
-                    /* c = */ 1.0,
+                    c,
                     &mut rng,
                 );
                 let dist = WeightedIndex::new(&pi_root).unwrap();
@@ -91,25 +96,25 @@ where
             for (h, pi) in traj {
                 buffer.push((h, pi, z));
             }
+            total += env.score();
         }
 
         // train
-        if buffer.storage.len() >= BATCH_SIZE {
-            let batch = buffer.sample_batch(BATCH_SIZE);
+        if buffer.storage.len() >= batch_size {
+            let batch = buffer.sample_batch(batch_size);
             let mut loss_tot = Tensor::<B, 1>::from([0.0f32]).to_device(device);
 
             for (h, pi_target, z) in batch {
                 // 1) representation from flat history
                 let x = Tensor::<B, 1>::from_floats(h, device);
                 let latent_params = model.forward(x.clone());
-                // split into: [policy_logits(A), value(1), reward(1), μ(HS), logvar(HS)]
+                
                 let policy_logits = latent_params.clone().slice([0..A]);
                 let v_pred        = latent_params.clone().slice([A..A+1]);
                 let r_pred        = latent_params.clone().slice([A+1..A+2]);
-                let μ             = latent_params.clone().slice([A+2..A+2+HS]);
+                let mu             = latent_params.clone().slice([A+2..A+2+HS]);
                 let logvar        = latent_params.slice([A+2+HS..A+2+2*HS]);
 
-                // sample stochastic latent (for dynamics you might feed this back in; here just use for loss)
                 let mut eps_arr: [f32; HS] = [0.0; HS];
                 for x in eps_arr.iter_mut() {
                     // Option A: bind a f32
@@ -118,10 +123,9 @@ where
                 }
                 
                 // turn that into a tensor
-                let ϵ = Tensor::<B, 1>::from_floats(eps_arr, device);
-
-                let σ = logvar.clone().mul_scalar(0.5).exp();
-                let z_latent = μ.clone() + σ.clone() * ϵ;
+                // let ϵ = Tensor::<B, 1>::from_floats(eps_arr, device);
+                let sigma = logvar.clone().mul_scalar(0.5).exp();
+                // let z_latent = mu.clone() + sigma.clone() * ϵ;
 
                 // policy loss
                 let pi_t = Tensor::<B, 1>::from(pi_target).to_device(device);
@@ -133,9 +137,9 @@ where
                 let loss_v = (v_pred - z_t.clone()).powf_scalar(2.0);
                 let loss_r = (r_pred - z_t.clone()).powf_scalar(2.0);
 
-                // KL( N(μ,σ²) ∥ N(0,1) ) = ½ sum(μ² + σ² − logσ² −1)
-                let kl = μ.clone().powf_scalar(2.0)
-                    + σ.clone().powf_scalar(2.0)
+                // KL( N(mu,sigma²) ∥ N(0,1) ) = ½ sum(mu² + sigma² − logsigma² −1)
+                let kl = mu.clone().powf_scalar(2.0)
+                    + sigma.clone().powf_scalar(2.0)
                     - logvar.clone()
                     - Tensor::from_floats([1.0f32; HS], device);
                 let loss_kl = kl.sum().mul_scalar(0.5);
@@ -143,36 +147,40 @@ where
                 loss_tot = loss_tot + loss_p + loss_v + loss_r + loss_kl;
             }
 
-            let loss = loss_tot.clone() / (BATCH_SIZE as f32);
+            let loss = loss_tot.clone() / (batch_size as f32);
             let grad = loss.backward();
             let grads = GradientsParams::from_grads(grad, &model);
             model = optimizer.step(learning_rate.into(), model, grads);
         }
     }
-
+    
+    println!("Mean Score : {:.3}", total / (episode_stop as f32));
     model
 }
 
-/// Runner for stochastic MuZero
 pub fn run_muzero_stochastic<
-    const HS: usize,
-    const A: usize,
-    Env: DeepDiscreteActionsEnv<HS, A> + Display + Default + Clone,
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default + Clone,
 >() {
     let device = get_device();
-    // now network outputs A + 1 + 1 + HS + HS dims
-    let model = MyQmlp::<MyAutodiffBackend>::new(&device, HS, A+1+1+HS+HS);
+    println!("Using device: {:?}", device);
+    
+    let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS+1+1+NUM_STATE_FEATURES+NUM_STATE_FEATURES);
 
     let params = DeepLearningParams::default();
-    let trained = episodic_mu_zero_stochastic::<HS, A, _, _, Env>(
+    let trained = episodic_mu_zero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, _, _, Env>(
         model,
         params.num_episodes,
-        params.episode_stop,        // games_per_iter
+        params.episode_stop,
         params.mcts_simulations,
-        params.gamma,
+        params.mz_games_per_iter,
         params.policy_lr,
+        params.mz_c,
+        params.mz_replay_cap,
+        params.mz_batch_size,
         &device,
     );
 
-    test_trained_model::<HS, A, Env>(&device, trained);
+    test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);
 }

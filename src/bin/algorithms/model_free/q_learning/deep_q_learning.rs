@@ -94,8 +94,6 @@ where
             online = optimizer.step(alpha.into(), online, grads);
 
             // 6) optionally update target net periodically
-            // e.g. every step or every episode:
-            // here we sync each step:
             target = online.clone();
 
             s = s2;

@@ -74,7 +74,7 @@ where
             let done = env.is_game_over();
             let s2 = env.state_description();
 
-            // 3) compute target y = r + γ * Q_target(s', argmax_a Q_online(s', a))
+            // 3) compute target y
             let y = if done {
                 Tensor::from([r]).to_device(device)
             } else {
@@ -98,7 +98,6 @@ where
             model = optimizer.step(alpha.into(), model, grads);
 
             // 6) sync target periodically or every step
-            // here: sync each episode end or each step as desired
             target = model.clone();
 
             s = s2;

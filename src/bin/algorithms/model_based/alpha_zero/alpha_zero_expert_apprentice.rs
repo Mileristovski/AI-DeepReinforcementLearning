@@ -103,7 +103,6 @@ fn run_mcts_pi<
         }
     }
 
-    // compute piₑ[a] ∝ visits_of_child[a]
     let root = &tree[0];
     let mut pi = [0.0; A];
     let total: usize = root
@@ -119,10 +118,6 @@ fn run_mcts_pi<
     pi
 }
 
-// —-------------------------------------------------------------------------------------
-// Expert‑Apprentice AlphaZero
-// —-------------------------------------------------------------------------------------
-/// `apprentice_prob` ∈ [0,1] governs how often we use the **network** (apprentice) vs MCTS (expert).
 pub fn episodic_alpha_zero_expert_apprentice<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
@@ -178,7 +173,6 @@ where
                     .into_vec::<f32>()
                     .unwrap();
 
-                // 3) mix expert/apprentice
                 let a = if rng.gen::<f32>() < apprentice_prob {
                     WeightedIndex::new(&pi_net).unwrap().sample(&mut rng)
                 } else {
@@ -189,7 +183,6 @@ where
                 env.step_from_idx(a);
             }
 
-            // final z = sign(score)
             let z = env.score().signum();
             for (s, pi_e, _) in trajectory {
                 training.push((s, pi_e, z));
@@ -198,9 +191,7 @@ where
             total_score += env.score();
         }
 
-        // now train the network on all collected (s, piₑ, z)
         for (state, pi_e, z) in training.drain(..) {
-            // forward
             let s_t = Tensor::<B, 1>::from_floats(state.as_slice(), device);
             let out = model.forward(s_t.clone());
             let (logits_p, value_v) = split_policy_value::<B, NUM_ACTIONS>(out);
@@ -212,7 +203,6 @@ where
             let zt = Tensor::<B, 1>::from_floats([z], device);
             let loss_v = (value_v.clone() - zt).powf_scalar(2.0);
 
-            // combined
             let loss = loss_p + loss_v;
             let grad = loss.backward();
             let grads = GradientsParams::from_grads(grad, &model);
@@ -248,7 +238,7 @@ pub fn run_alpha_zero_expert_apprentice<
         params.episode_stop,
         params.az_self_play_games,
         params.mcts_simulations,
-        params.apprentice_prob,
+        params.az_apprentice_prob,
         params.c,
         params.alpha,
         &device,

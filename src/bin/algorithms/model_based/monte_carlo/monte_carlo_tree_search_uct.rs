@@ -36,12 +36,16 @@ pub fn run_mcts<
     let params = DeepLearningParams::default();
     let mut env = Env::default();
     let _device: MyDevice = get_device();
+    println!("Using device: {:?}", _device);
     println!("Running MCTS on {} with {} sims, c={}", env_name, params.mcts_simulations, params.mcts_c);
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();
+    let mut total = 0.0;
+    
     for ep in tqdm!(0..params.num_episodes) {
         if ep > 0 && ep % params.episode_stop == 0 {
-            println!("Episode {}/{} complete", ep, params.num_episodes);
+            println!("Mean Score : {:.3}", total / params.episode_stop as f32);
+            total = 0.0;
         }
         env.reset();
         env.set_against_random();
@@ -52,6 +56,7 @@ pub fn run_mcts<
             env.step_from_idx(action);
         }
         println!("{}", env);
+        total += env.score();
     }
 }
 
@@ -68,7 +73,6 @@ where
 {
     // tree of nodes
     let mut tree: Vec<Node<A>> = Vec::new();
-    // map each node to its env state (we only need to clone on expansion)
     let mut states: Vec<Env> = Vec::new();
 
     // create root
@@ -88,7 +92,7 @@ where
             let parent_n = tree[node].visits as f32;
             let (best_a, &child_opt) = tree[node].children.iter()
                 .enumerate()
-                .filter(|&(a, &c)| c.is_some())
+                .filter(|&(_, &c)| c.is_some())
                 .max_by(|&(a,_),&(b,_)| {
                     let ca = tree[node].children[a].unwrap();
                     let cb = tree[node].children[b].unwrap();
@@ -106,10 +110,8 @@ where
 
         // 2) Expansion
         if !env.is_game_over() {
-            // pick one untried action
             let a = tree[node].untried.pop().unwrap();
             env.step_from_idx(a);
-            // create new child
             let new_id = tree.len();
             tree.push(Node::new(env.available_actions_ids()));
             states.push(env.clone());
@@ -138,7 +140,7 @@ where
     root.children.iter()
         .enumerate()
         .filter(|&(_, &c)| c.is_some())
-        .max_by_key(|&(a, &c)| {
+        .max_by_key(|&(_, &c)| {
             let ci = c.unwrap();
             tree[ci].visits
         })

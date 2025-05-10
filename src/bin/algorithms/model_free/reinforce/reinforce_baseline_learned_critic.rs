@@ -12,7 +12,6 @@ use kdam::tqdm;
 use rand::distributions::Distribution;
 use rand::SeedableRng;
 
-/// REINFORCE with a critic baseline (episodic actor–critic).
 pub fn episodic_actor_critic<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
@@ -42,17 +41,12 @@ where
         .init();
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();
-    let mut total_score = 0.0;
+    let mut total = 0.0;
 
     for ep in tqdm!(0..num_episodes) {
         if ep > 0 && ep % episode_stop == 0 {
-            println!(
-                "Ep {:>4}/{}  mean score {:.3}",
-                ep,
-                num_episodes,
-                total_score / episode_stop as f32
-            );
-            total_score = 0.0;
+            println!("Mean Score : {:.3}", total / episode_stop as f32);
+            total = 0.0;
         }
 
         // collect one episode
@@ -84,28 +78,28 @@ where
 
             trajectory.push((s, a, r));
         }
-        total_score += env.score();
+        total += env.score();
 
         // compute returns G_t
         let mut returns = Vec::with_capacity(trajectory.len());
-        let mut G = 0.0;
+        let mut g = 0.0;
         for &(_, _, r) in trajectory.iter().rev() {
-            G = r + gamma * G;
-            returns.push(G);
+            g = r + gamma * g;
+            returns.push(g);
         }
         returns.reverse();
 
         // update both networks
-        for ((state, action, _), &G_t) in trajectory.iter().zip(returns.iter()) {
+        for ((state, action, _), &g_t) in trajectory.iter().zip(returns.iter()) {
             let s_t = Tensor::<B, 1>::from_floats(state.as_slice(), device);
             let v_s = critic.forward(s_t.clone()).slice([0..1]);
-            let loss_cri = (v_s - Tensor::from([G_t]).to_device(device)).powf_scalar(2.0);
+            let loss_cri = (v_s - Tensor::from([g_t]).to_device(device)).powf_scalar(2.0);
             let grad_cri = loss_cri.backward();
             let grads_cri = GradientsParams::from_grads(grad_cri, &critic);
             critic = opt_cri.step(critic_lr.into(), critic, grads_cri);
 
             let baseline = critic.forward(s_t.clone()).slice([0..1]).detach().into_scalar();
-            let advantage = G_t - baseline;
+            let advantage = g_t - baseline;
             let logits = policy.forward(s_t);
             let logp = log_softmax(logits).slice([*action..action + 1]);
             let loss_pol = logp.mul_scalar(-advantage);
@@ -115,15 +109,10 @@ where
         }
     }
 
-    println!(
-        "Final mean score (last {} eps): {:.3}",
-        episode_stop,
-        total_score / episode_stop as f32
-    );
+    println!("Mean Score : {:.3}", total / (episode_stop as f32));
     policy
 }
 
-/// Convenience runner for actor–critic.
 pub fn run_reinforce_actor_critic<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,

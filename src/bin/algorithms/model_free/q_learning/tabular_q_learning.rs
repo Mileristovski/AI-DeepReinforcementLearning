@@ -80,7 +80,6 @@ pub fn episodic_tabular_q_learning<
         }
     }
     println!("Mean Score : {:.3}", total_score / episode_stop as f32);
-
     q_table
 }
 

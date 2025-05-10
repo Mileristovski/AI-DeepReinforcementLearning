@@ -12,7 +12,6 @@ use kdam::tqdm;
 use rand::distributions::{Distribution, WeightedIndex};
 use rand::SeedableRng;
 
-/// Vanilla REINFORCE (no baseline) with episodic returns, masked so illegal actions never sampled.
 pub fn episodic_reinforce<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
@@ -35,14 +34,14 @@ where
         .init();
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();
-    let mut total_score = 0.0;
+    let mut total = 0.0;
     // large negative for illegal actions
     let neg_inf = Tensor::<B, 1>::from_floats([-1e9; NUM_ACTIONS], device);
 
     for ep in tqdm!(0..num_episodes) {
         if ep > 0 && ep % episode_stop == 0 {
-            println!("Ep {:>4}/{}  mean score {:.3}", ep, num_episodes, total_score / episode_stop as f32);
-            total_score = 0.0;
+            println!("Mean Score : {:.3}", total / episode_stop as f32);
+            total = 0.0;
         }
 
         let mut env = Env::default();
@@ -80,15 +79,15 @@ where
 
         // compute returns G_t
         let mut returns = Vec::with_capacity(trajectory.len());
-        let mut G = 0.0;
+        let mut g = 0.0;
         for &(_, _, r) in trajectory.iter().rev() {
-            G = r + gamma * G;
-            returns.push(G);
+            g = r + gamma * g;
+            returns.push(g);
         }
         returns.reverse();
 
         // policy update
-        for ((state, action, _), &G_t) in trajectory.iter().zip(returns.iter()) {
+        for ((state, action, _), &g_t) in trajectory.iter().zip(returns.iter()) {
             let s_t = Tensor::<B, 1>::from_floats(state.as_slice(), device);
             let logits = model.forward(s_t);
 
@@ -101,19 +100,18 @@ where
             let log_probs = log_softmax(adjusted);
             let logp = log_probs.clone().slice([*action..*action + 1]);
 
-            let loss = logp.mul_scalar(-G_t);
+            let loss = logp.mul_scalar(-g_t);
             let grad = loss.backward();
             let grads = GradientsParams::from_grads(grad, &model);
             model = optimizer.step(learning_rate.into(), model, grads);
         }
 
-        total_score += env.score();
+        total += env.score();
     }
-    println!("Mean Score : {:.3}", total_score / (episode_stop as f32));
+    println!("Mean Score : {:.3}", total / (episode_stop as f32));
     model
 }
 
-/// Helper to run REINFORCE end‑to‑end.
 pub fn run_reinforce<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
@@ -136,7 +134,7 @@ pub fn run_reinforce<
         params.num_episodes,
         params.episode_stop,
         params.gamma,
-        params.alpha, // use alpha as policy‐learning‐rate
+        params.alpha, 
         &device,
     );
 

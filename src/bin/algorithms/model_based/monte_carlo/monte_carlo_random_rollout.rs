@@ -69,7 +69,7 @@ fn episodic_random_rollout<
     Env: Clone + DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default,
 >(
     num_episodes: usize,
-    report_interval: usize,
+    episode_stop: usize,
     rollouts_per_action: usize,
     rng: &mut Xoshiro256PlusPlus,
 ) where
@@ -84,14 +84,11 @@ fn episodic_random_rollout<
         env.reset();
         total_score += run_episode(&mut env, rollouts_per_action, rng);
 
-        if (ep + 1) % report_interval == 0 {
-            println!(
-                "Ep {}/{}  mean score {:.3}",
-                ep + 1,
-                num_episodes,
-                total_score / (report_interval as f32)
-            );
-            total_score = 0.0;
+        if (ep + 1) % episode_stop == 0 {
+            if ep > 0 && ep % episode_stop == 0 {
+                println!("Mean Score : {:.3}", total_score / episode_stop as f32);
+                total_score = 0.0;
+            }
         }
     }
 }
@@ -128,7 +125,6 @@ pub fn run_random_rollout<
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Clone + Display + Default,
 >() {
     let params = DeepLearningParams::default();
-    // Initialize RNG with fixed seed for reproducibility
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(params.rng_seed);
 
     episodic_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(
