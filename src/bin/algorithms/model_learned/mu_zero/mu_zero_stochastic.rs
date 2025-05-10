@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
+use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -52,14 +52,14 @@ pub fn episodic_mu_zero_stochastic<
     c: f32,
     replay_cap: usize,
     batch_size: usize,
-    weight_decay:      f32,
+    _weight_decay:      f32,
     device: &B::Device,
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
 {
     let mut optimizer = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
+        //.with_weight_decay(Some(WeightDecayConfig::new(_weight_decay)))
         .init();
 
     let mut buffer = ReplayBuffer::<([f32; HS], [f32; A], f32)>::new(replay_cap);

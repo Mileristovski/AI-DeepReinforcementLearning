@@ -1,3 +1,4 @@
+use rand_distr::Distribution;
 use std::fmt::Display;
 use std::io;
 use burn::module::AutodiffModule;
@@ -256,4 +257,21 @@ pub fn greedy_policy_action<B: Backend<FloatElem = f32, IntElem = i64>>(
     let masked = policy_logits.clone() * mask_tensor.clone()
         + (mask_tensor.clone().mul_scalar(-1.0).add_scalar(1.0)) * fmin_vec.clone();
     masked.argmax(0).into_scalar() as usize
+}
+
+// helper ────────────────────────────────────────────────────────────────
+pub fn sample_distinct_weighted(
+    probs: &[f32],
+    batch: usize,
+    rng: &mut impl rand::Rng,
+) -> Vec<usize> {
+    use rand::distributions::WeightedIndex;
+    use std::collections::HashSet;
+
+    let dist = WeightedIndex::new(probs).unwrap();
+    let mut set = HashSet::with_capacity(batch);
+    while set.len() < batch {
+        set.insert(dist.sample(rng));
+    }
+    set.into_iter().collect()
 }

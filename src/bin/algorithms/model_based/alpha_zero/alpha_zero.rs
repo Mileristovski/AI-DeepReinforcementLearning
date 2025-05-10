@@ -1,7 +1,7 @@
 // --- alpha_zero.rs ---
 
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
+use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::{AutodiffBackend, Backend};
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -11,9 +11,9 @@ use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand::distributions::WeightedIndex;
-use rand::prelude::Distribution;
+use rand::prelude::{Distribution, IteratorRandom};
 
 // bring in only the underlying search kernel, not the CLI runner:
 
@@ -29,44 +29,126 @@ fn split_policy_value<B: Backend>(
 }
 
 /// run num_sims of UCT from `root_env` (cloned), then return a π proportional to child visits.
-fn run_mcts_policy<
+pub fn run_mcts_policy<
     const S: usize,
     const A: usize,
-    Env: DeepDiscreteActionsEnv<S, A> + Clone
+    Env: DeepDiscreteActionsEnv<S, A> + Clone,
+    R: Rng + ?Sized,
 >(
     root_env: &Env,
-    // num_sims: usize
+    num_sims: usize,
+    c: f32,
+    rng: &mut R,
 ) -> [f32; A] {
+    // ─────────────  Node definition  ────────────────────────────────
     #[derive(Clone)]
-    struct Node<const A: usize> { visits: usize, children: [Option<usize>; A] }
+    struct Node<const A: usize> {
+        visits:   usize,
+        value:    f32,
+        children: [Option<usize>; A],
+        untried:  Vec<usize>,
+    }
+    impl<const A: usize> Node<A> {
+        fn new(avail: impl Iterator<Item = usize>) -> Self {
+            Self {
+                visits:   0,
+                value:    0.0,
+                children: [(); A].map(|_| None),
+                untried:  avail.collect(),
+            }
+        }
+    }
 
-    let mut tree: Vec<Node<A>> = Vec::new();
-    let mut states: Vec<Env> = Vec::new();
-    
-    let root_id = 0;
-    let root_node = Node { visits: 0, children: [(); A].map(|_| None) };
-    tree.push(root_node.clone());
+    // ─────────────  MCTS tree storage  ──────────────────────────────
+    let mut tree:   Vec<Node<A>> = Vec::new();
+    let mut states: Vec<Env>     = Vec::new();
+
+    // root
+    tree.push(Node::new(root_env.available_actions_ids()));
     states.push(root_env.clone());
 
-    /*for _ in 0..num_sims {
-        let node = root_id;
-    }*/
+    // ─────────────  Simulations  ────────────────────────────────────
+    for _ in 0..num_sims {
+        // 1) Selection
+        let mut node_id = 0;
+        let mut env     = root_env.clone();
+        let mut path    = vec![0];
 
-    let mut visits = [0f32; A];
-    let root = &tree[root_id];
-    for (a, &opt_child) in root.children.iter().enumerate() {
-        if let Some(child) = opt_child {
-            visits[a] = tree[child].visits as f32;
+        while tree[node_id].untried.is_empty() && !env.is_game_over() {
+            let parent_n = tree[node_id].visits as f32;
+            let mut best_score = f32::NEG_INFINITY;
+            let mut best_a     = 0;
+
+            for a in 0..A {
+                if let Some(child_id) = tree[node_id].children[a] {
+                    let child    = &tree[child_id];
+                    let q        = child.value / child.visits as f32; // mean value
+                    let u        = q
+                        + c * (parent_n.ln() / (child.visits as f32 + 1e-8)).sqrt();
+                    if u > best_score {
+                        best_score = u;
+                        best_a     = a;
+                    }
+                }
+            }
+
+            // descend
+            if let Some(child_id) = tree[node_id].children[best_a] {
+                env.step_from_idx(best_a);
+                node_id = child_id;
+                path.push(node_id);
+            } else {
+                break; // no legal child (should not happen)
+            }
+        }
+
+        // 2) Expansion
+        if !env.is_game_over() && !tree[node_id].untried.is_empty() {
+            let a = tree[node_id].untried.pop().unwrap();
+            env.step_from_idx(a);
+            let new_id = tree.len();
+            tree.push(Node::new(env.available_actions_ids()));
+            states.push(env.clone());
+            tree[node_id].children[a] = Some(new_id);
+            node_id = new_id;
+            path.push(node_id);
+        }
+
+        // 3) Simulation (random roll-out)
+        let mut rollout = env.clone();
+        while !rollout.is_game_over() {
+            let a = rollout.available_actions_ids().choose(rng).unwrap();
+            rollout.step_from_idx(a);
+        }
+        let reward = rollout.score();
+
+        // 4) Back-propagation
+        for &nid in &path {
+            tree[nid].visits += 1;
+            tree[nid].value  += reward;
         }
     }
-    
-    let sum: f32 = visits.iter().sum();
-    if sum > 0.0 {
-        for v in &mut visits {
-            *v /= sum;
+
+    // ─────────────  Derive π from child visits  ─────────────────────
+    let mut pi = [0.0f32; A];
+    let root   = &tree[0];
+
+    let total_visits: usize = root.children.iter()
+        .filter_map(|&c| c)
+        .map(|cid| tree[cid].visits)
+        .sum();
+
+    if total_visits == 0 {
+        // fallback: uniform distribution avoids AllWeightsZero panic
+        for p in &mut pi { *p = 1.0 / A as f32; }
+    } else {
+        for a in 0..A {
+            if let Some(cid) = root.children[a] {
+                pi[a] = tree[cid].visits as f32 / total_visits as f32;
+            }
         }
     }
-    visits
+    pi
 }
 
 /// sample an index from a fixed‑size probability array
@@ -87,16 +169,17 @@ pub fn episodic_alpha_zero<
     num_iterations: usize,
     episode_stop: usize,
     games_per_iteration: usize,
-    // mcts_sims: usize,
     learning_rate: f32,
-    weight_decay: f32,
+    _weight_decay: f32,
+    mcts_simulations: usize,
+    c: f32,
     device: &B::Device,
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
 {
     let mut optimizer = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
+        //.with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();
@@ -116,9 +199,11 @@ where
             let mut trajectory = Vec::new();
             while !env.is_game_over() {
                 let s = env.state_description();
-                let pi = run_mcts_policy::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(
+                let pi = run_mcts_policy::<NUM_STATE_FEATURES, NUM_ACTIONS, Env, _>(
                     &env,
-                    // mcts_sims
+                    mcts_simulations,  // e.g. 100
+                    c,                 // UCT exploration constant
+                    &mut rng,
                 );
                 let a = sample_from(pi, &mut rng);
                 trajectory.push((s, pi, a));
@@ -173,12 +258,13 @@ pub fn run_alpha_zero<
         Env,
     >(
         model,
-        params.az_iterations,
+        params.num_episodes,
         params.episode_stop,
         params.az_self_play_games,
-        // params.mcts_simulations,
         params.alpha,
         params.opt_weight_decay_penalty,
+        params.mcts_simulations,
+        params.c,
         &device,
     );
 

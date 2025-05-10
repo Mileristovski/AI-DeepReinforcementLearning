@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
+use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use kdam::tqdm;
@@ -52,7 +52,7 @@ pub fn episodic_mu_zero<
     mcts_sims:         usize,
     learning_rate:     f32,
     c:                 f32,
-    weight_decay:      f32,
+    _weight_decay:      f32,
     device:            &B::Device,
 ) -> M
 where
@@ -63,7 +63,7 @@ where
 {
     // optimiser ------------------------------------------------------------
     let mut opt = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
+        //.with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
 
     // replay buffer & rng --------------------------------------------------

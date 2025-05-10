@@ -1,7 +1,6 @@
 use std::fmt::Display;
 use crate::environments::env::DeepDiscreteActionsEnv;
 use burn::module::AutodiffModule;
-use burn::optim::decay::WeightDecayConfig;
 use burn::optim::{AdamConfig, GradientsParams, Optimizer};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
@@ -31,13 +30,13 @@ pub fn episodic_semi_gradient_sarsa<
     minus_one: &Tensor<B, 1>,
     plus_one:  &Tensor<B, 1>,
     fmin_vec:  &Tensor<B, 1>,
-    weight_decay: f32,
+    _weight_decay: f32,
     device: &B::Device) -> M
 where
     M::InnerModule: Forward<B=B::InnerBackend>,
 {
     let mut optimizer = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
+        //.with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();

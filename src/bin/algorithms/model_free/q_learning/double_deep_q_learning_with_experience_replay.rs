@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
+use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -56,7 +56,7 @@ pub fn episodic_double_deep_q_learning_er<
     minus_one: &Tensor<B, 1>,
     plus_one:  &Tensor<B, 1>,
     fmin_vec:  &Tensor<B, 1>,
-    weight_decay: f32,
+    _weight_decay: f32,
     device: &B::Device,
 ) -> M
 where
@@ -69,7 +69,7 @@ where
     let mut target = model.clone();
     let mut buffer = ReplayBuffer::<[f32; NUM_STATE_FEATURES], REPLAY_CAPACITY>::new();
     let mut optimizer = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
+        //.with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut total = 0.0;
@@ -110,46 +110,48 @@ where
 
             if buffer.storage.len() >= BATCH_SIZE {
                 let batch = buffer.sample_batch(BATCH_SIZE);
-                let mut data_s = [[0.0f32; NUM_STATE_FEATURES]; BATCH_SIZE];
-                let mut data_next = [[0.0f32; NUM_STATE_FEATURES]; BATCH_SIZE];
-                for (i, (s_i, _, _, s2_i, _)) in batch.iter().enumerate() {
-                    data_s[i].copy_from_slice(s_i.as_slice());
-                    data_next[i].copy_from_slice(s2_i.as_slice());
+                let mut s_buf  = [[0.0; NUM_STATE_FEATURES]; BATCH_SIZE];
+                let mut s2_buf = [[0.0; NUM_STATE_FEATURES]; BATCH_SIZE];
+                let mut a_buf  = [0usize; BATCH_SIZE];
+                let mut r_buf  = [0.0   ; BATCH_SIZE];
+                let mut d_buf  = [0.0   ; BATCH_SIZE];
+
+                for j in 0..BATCH_SIZE {
+                    let (s_, a_, r_, s2_, done_) = &batch[j];
+                    s_buf [j].copy_from_slice(s_.as_slice());
+                    s2_buf[j].copy_from_slice(s2_.as_slice());
+                    a_buf [j] = *a_;
+                    r_buf [j] = *r_;
+                    d_buf [j] = if *done_ { 1.0 } else { 0.0 };
                 }
-                let state_t = Tensor::<B,2>::from_data(data_s, device);
-                let next_t  = Tensor::<B,2>::from_data(data_next, device);
+                let s_t  = Tensor::<B,2>::from_data(s_buf , device);
+                let s2_t = Tensor::<B,2>::from_data(s2_buf, device);
 
-                let q_next_online = model.forward(next_t.clone());
-                let q_next_target = target.forward(next_t.clone());
+                // ── compute Double-DQN target -----------------------------------------
+                let q_next_online  = model .forward(s2_t.clone());   
+                let best_a         = q_next_online.argmax(1);        
+                let q_next_target  = target.forward(s2_t);           
+                let q_next         = q_next_target
+                    .gather(1, best_a.clone())
+                    .squeeze::<1>(1);                                     // [B]
+                let done_mask      = Tensor::<B,1>::from_floats(d_buf, device);
+                let target_vec     = Tensor::<B,1>::from_floats(r_buf, device)
+                    + q_next * (done_mask.mul_scalar(-1.0).add_scalar(1.0)) * gamma; 
 
-                let mut y = [[0.0f32;1]; BATCH_SIZE];
-                for (j, &(_, _, r_j, _, done_j)) in batch.iter().enumerate() {
-                    let yj = if done_j {
-                        r_j
-                    } else {
-                        let row = q_next_online.clone().slice([j..j+1]);
-                        let best_a = row.argmax(1).into_scalar() as usize;
-                        let q_val = q_next_target.clone()
-                            .slice([j..j+1, best_a..best_a+1])
-                            .into_scalar();
-                        r_j + gamma * q_val
-                    };
-                    y[j][0] = yj;
+                // ── current Q(s,a) -----------------------------------------------------
+                let q_online = model.forward(s_t);
+                let mut ind_buf = [[0i64; 1]; BATCH_SIZE];
+                for j in 0..BATCH_SIZE {
+                    ind_buf[j][0] = a_buf[j] as i64;
                 }
-                let y_t = Tensor::<B,2>::from_data(y, device);
+                let ind = Tensor::<B, 2, Int>::from_data(ind_buf, device);
+                let q_sa = q_online.gather(1, ind).squeeze::<1>(1);       
 
-                let q_vals = model.forward(state_t.clone());
-                let mut q_sa = [[0.0f32;1]; BATCH_SIZE];
-                for (j, &(_, a_j, _, _, _)) in batch.iter().enumerate() {
-                    q_sa[j][0] = q_vals.clone()
-                        .slice([j..j+1, a_j..a_j+1])
-                        .into_scalar();
-                }
-                let q_t = Tensor::<B,2>::from_data(q_sa, device);
+                // ── loss, backward, optimise ------------------------------------------
+                let td   = target_vec.clone() - q_sa;                     // [B]
+                let loss = td.powf_scalar(2.0).mean();
 
-                let loss = (q_t - y_t).powf_scalar(2.0).mean();
-                let grad = loss.backward();
-                let grads = GradientsParams::from_grads(grad, &model);
+                let grads = GradientsParams::from_grads(loss.backward(), &model);
                 model = optimizer.step(alpha.into(), model, grads);
             }
         }

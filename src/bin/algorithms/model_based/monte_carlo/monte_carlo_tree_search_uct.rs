@@ -27,92 +27,97 @@ impl<const A: usize> Node<A> {
     }
 }
 
-/// Perform MCTS from the given root‐environment, return the chosen action.
 pub fn mcts_search<const S: usize, const A: usize, Env, R>(
     root_env: &Env,
-    num_sim: usize,
-    c: f32,
-    rng: &mut R,
+    num_sim:   usize,
+    c:         f32,
+    rng:       &mut R,
 ) -> usize
 where
     Env: DeepDiscreteActionsEnv<S, A> + Clone,
-    R: rand::Rng + ?Sized,
+    R  : rand::Rng + ?Sized,
 {
-    // tree of nodes
-    let mut tree: Vec<Node<A>> = Vec::new();
-    let mut states: Vec<Env> = Vec::new();
+    #[derive(Clone)]
+    struct Node<const A: usize> {
+        visits:   u32,
+        value:    f32,
+        children: [Option<usize>; A],
+        untried:  Vec<usize>,
+    }
+    impl<const A: usize> Node<A> {
+        fn new(actions: impl Iterator<Item = usize>) -> Self {
+            Self {
+                visits:   0,
+                value:    0.0,
+                children: [(); A].map(|_| None),
+                untried : actions.collect(),
+            }
+        }
+    }
 
-    // create root
-    let root_id = 0;
-    tree.push(Node::new(root_env.available_actions_ids()));
-    states.push(root_env.clone());
+    let mut tree: Vec<Node<A>> = vec![Node::new(root_env.available_actions_ids())];
 
     for _ in 0..num_sim {
-        // 1) Selection
-        let mut node = root_id;
-        let mut env = root_env.clone();
-        let mut path = vec![node];
+        let mut env  = root_env.clone();
+        let mut path = Vec::<usize>::with_capacity(64);
+        let mut node = 0;                       // root id
+        path.push(node);
 
-        // descend until we find a node with untried actions or terminal
         while tree[node].untried.is_empty() && !env.is_game_over() {
-            // UCT select
             let parent_n = tree[node].visits as f32;
-            let (best_a, &child_opt) = tree[node].children.iter()
+            let (best_a, child, _) = tree[node]
+                .children
+                .iter()
                 .enumerate()
-                .filter(|&(_, &c)| c.is_some())
-                .max_by(|&(a,_),&(b,_)| {
-                    let ca = tree[node].children[a].unwrap();
-                    let cb = tree[node].children[b].unwrap();
-                    let qa = tree[ca].value / tree[ca].visits as f32;
-                    let qb = tree[cb].value / tree[cb].visits as f32;
-                    let ua = qa + c * (parent_n.ln() / tree[ca].visits as f32).sqrt();
-                    let ub = qb + c * (parent_n.ln() / tree[cb].visits as f32).sqrt();
-                    ua.partial_cmp(&ub).unwrap()
-                }).unwrap();
-            let child = child_opt.unwrap();
-            env.step_from_idx(best_a);
+                .filter_map(|(a, &c)| c.map(|id| (a, id)))   
+                .map(|(a, id)| {
+                    let q  = tree[id].value   / tree[id].visits.max(1) as f32;
+                    let u  = c * ((parent_n.ln() / tree[id].visits.max(1) as f32).sqrt());
+                    (q + u, a, id)
+                })
+                // .choose(&mut thread_rng())  // <- add this for random tie-break
+                .max_by(|x, y| x.0.partial_cmp(&y.0).unwrap_or(std::cmp::Ordering::Equal))
+                .unwrap();                    
+
+            env.step_from_idx(best_a as usize);
             node = child;
             path.push(node);
         }
 
-        // 2) Expansion
         if !env.is_game_over() {
-            let a = tree[node].untried.pop().unwrap();
-            env.step_from_idx(a);
-            let new_id = tree.len();
-            tree.push(Node::new(env.available_actions_ids()));
-            states.push(env.clone());
-            tree[node].children[a] = Some(new_id);
-            node = new_id;
-            path.push(node);
+            if let Some(a) = tree[node].untried.pop() {     
+                env.step_from_idx(a);
+                let id = tree.len();
+                tree.push(Node::new(env.available_actions_ids()));
+                tree[node].children[a] = Some(id);
+                node = id;
+                path.push(node);
+            }
         }
 
-        // 3) Simulation (roll‑out)
-        let mut rollout_env = env.clone();
-        while !rollout_env.is_game_over() {
-            let a = rollout_env.available_actions_ids().choose(rng).unwrap();
-            rollout_env.step_from_idx(a);
+        while !env.is_game_over() {
+            if let Some(a) = env.available_actions_ids().choose(rng) {
+                env.step_from_idx(a);
+            } else {
+                break; 
+            }
         }
-        let reward = rollout_env.score();
+        let reward = env.score();
 
-        // 4) Backpropagate
         for &n in &path {
             tree[n].visits += 1;
-            tree[n].value += reward;
+            tree[n].value  += reward;
         }
     }
 
-    // at root, pick the action with highest visit count
-    let root = &tree[root_id];
-    root.children.iter()
+    tree[0]
+        .children
+        .iter()
         .enumerate()
-        .filter(|&(_, &c)| c.is_some())
-        .max_by_key(|&(_, &c)| {
-            let ci = c.unwrap();
-            tree[ci].visits
-        })
+        .filter_map(|(a, &c)| c.map(|id| (a, tree[id].visits)))
+        .max_by_key(|&(_, v)| v)
         .map(|(a, _)| a)
-        .unwrap()
+        .unwrap_or_else(|| root_env.available_actions_ids().next().unwrap()) // fallback
 }
 
 fn episodic_mcts<
@@ -148,7 +153,6 @@ fn episodic_mcts<
     }
 }
 
-/// “Test” episodes in a loop, prompting user to press Enter or “quit”
 fn test_mcts<
     const S: usize,
     const A: usize,
@@ -181,7 +185,6 @@ fn test_mcts<
     }
 }
 
-/// entry point: first training, then interactive testing — just like random rollout
 pub fn run_mcts<
     const S: usize,
     const A: usize,

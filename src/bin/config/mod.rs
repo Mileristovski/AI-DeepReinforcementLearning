@@ -46,12 +46,8 @@ pub struct DeepLearningParams {
     pub mcts_simulations: usize,
     pub mcts_c: f32,
 
-    // AlphaZero‑specific
-    pub az_iterations: usize,        
-    pub az_self_play_games: usize,   
-    // pub az_batch_size: usize,     
-    // pub az_weight_decay: f32,     
-    pub az_apprentice_prob: f32,
+    // AlphaZero‑specific    
+    pub az_self_play_games: usize,     
     pub c: f32,
     
     // MuZero-specific
@@ -59,8 +55,6 @@ pub struct DeepLearningParams {
     pub mz_replay_cap: usize,
     pub mz_batch_size: usize,
     pub mz_c: f32,
-    
-    // Optimiser
     pub opt_weight_decay_penalty: f32,
 
     // RNG
@@ -70,8 +64,8 @@ pub struct DeepLearningParams {
 impl Default for DeepLearningParams {
     fn default() -> Self {
         Self {
-            num_episodes: 10_000,
-            episode_stop: 1000,
+            num_episodes: 1_000,
+            episode_stop: 100,
             start_epsilon: 1.0,
             final_epsilon: 1e-5,
             
@@ -92,11 +86,7 @@ impl Default for DeepLearningParams {
             mcts_c: 1.414,
 
             // AlphaZero
-            az_iterations: 700_000,
             az_self_play_games: 1,
-            // az_batch_size: 256,
-            // az_weight_decay: 1e-4,
-            az_apprentice_prob: 0.5,
             c: 1.4,
 
             // MuZero

@@ -1,28 +1,26 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
+use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, test_trained_model};
+use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, sample_distinct_weighted, test_trained_model};
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
-use rand::distributions::{Distribution, WeightedIndex};
 use rand::SeedableRng;
 
 
 struct PrioritizedReplayBuffer<S, const N: usize> {
     storage: Vec<(S, usize, f32, S, bool)>,
     priorities: Vec<f32>,
-    pos: usize,
-    alpha: f32,
+    pos: usize
 }
 
 impl<S: Clone, const N: usize> PrioritizedReplayBuffer<S, N> {
-    fn new(alpha: f32) -> Self {
-        Self { storage: Vec::with_capacity(N), priorities: Vec::with_capacity(N), pos: 0, alpha }
+    fn new() -> Self {
+        Self { storage: Vec::with_capacity(N), priorities: Vec::with_capacity(N), pos: 0 }
     }
     fn push(&mut self, transition: (S, usize, f32, S, bool)) {
         let priority = self.priorities.get(self.pos).cloned().unwrap_or(1.0);
@@ -35,18 +33,6 @@ impl<S: Clone, const N: usize> PrioritizedReplayBuffer<S, N> {
         }
         self.pos = (self.pos + 1) % N;
     }
-    /// sample indices and transitions with probability ∝ priority^alpha
-    fn sample_batch(&self, batch_size: usize) -> (Vec<usize>, Vec<(S, usize, f32, S, bool)>) {
-        let probs: Vec<f32> = self.priorities.iter().map(|p| p.powf(self.alpha)).collect();
-        let dist = WeightedIndex::new(&probs).unwrap();
-        let mut rng = Xoshiro256PlusPlus::from_entropy();
-        let mut indices = Vec::with_capacity(batch_size);
-        for _ in 0..batch_size {
-            indices.push(dist.sample(&mut rng));
-        }
-        let batch = indices.iter().map(|&i| self.storage[i].clone()).collect();
-        (indices, batch)
-    }
     /// update priorities at given indices
     fn update_priorities(&mut self, indices: &[usize], errors: &[f32]) {
         for (&i, &err) in indices.iter().zip(errors.iter()) {
@@ -55,131 +41,170 @@ impl<S: Clone, const N: usize> PrioritizedReplayBuffer<S, N> {
     }
 }
 
-/// Double DQN with prioritized experience replay
+#[allow(clippy::too_many_arguments)]
 pub fn episodic_double_deep_q_learning_per<
-    const NUM_STATE_FEATURES: usize,
-    const NUM_ACTIONS: usize,
-    M: Forward<B = B> + AutodiffModule<B> + Clone,
-    B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
-    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default,
+    const N_S: usize,
+    const N_A: usize,
+    M,
+    B,
+    Env,
 >(
     mut model: M,
     num_episodes: usize,
-    episode_stop: usize,
-    gamma: f32,
-    alpha: f32,
-    per_alpha: f32,
-    start_epsilon: f32,
-    final_epsilon: f32,
+    log_every:    usize,
+    gamma:        f32,
+    lr:           f32,
+    per_alpha:    f32,
+    eps_start:    f32,
+    eps_final:    f32,
     minus_one: &Tensor<B, 1>,
-    plus_one:  &Tensor<B, 1>,
-    fmin_vec:  &Tensor<B, 1>,
-    weight_decay: f32,
+    plus_one : &Tensor<B, 1>,
+    fmin_vec : &Tensor<B, 1>,
+    _weight_decay: f32,
     device: &B::Device,
 ) -> M
 where
+    B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
+    M: Forward<B = B> + AutodiffModule<B> + Clone,
     M::InnerModule: Forward<B = B::InnerBackend>,
+    Env: DeepDiscreteActionsEnv<N_S, N_A> + Display + Default,
 {
-    const REPLAY_CAPACITY: usize = 100_000;
-    const BATCH_SIZE: usize = 32;
-    const TARGET_UPDATE_EVERY: usize = 1_000;
+    // ── constants ──────────────────────────────────────────────────
+    const CAPACITY: usize = 100_000;
+    const BATCH:    usize = 64;
+    const TARGET_EVERY: usize = 10_000;          // gradient steps
+    const PRIO_EPS:  f32 = 1e-6;
+    const PRIO_MAX:  f32 = 10.0;
+    const BETA_START:f32 = 0.4;
+    const BETA_END:  f32 = 1.0;
+    const BETA_FRAMES: usize = 1_000_000;
+    // ───────────────────────────────────────────────────────────────
 
     let mut target = model.clone();
-    let mut buffer = PrioritizedReplayBuffer::<[f32; NUM_STATE_FEATURES], REPLAY_CAPACITY>::new(per_alpha);
-    let mut optimizer = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
+    let mut opt = AdamConfig::new()
+        // .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
-    let mut rng = Xoshiro256PlusPlus::from_entropy();
-    let mut total = 0.0;
+    let mut buf =
+        PrioritizedReplayBuffer::<[f32; N_S], CAPACITY>::new();
+
+    let mut rng        = Xoshiro256PlusPlus::from_entropy();
+    let mut score_sum  = 0.0;
+    let mut grad_steps = 0usize;
 
     for ep in tqdm!(0..num_episodes) {
-        if ep > 0 && ep % episode_stop == 0 {
-            println!("Mean Score : {:.3}", total / episode_stop as f32);
-            total = 0.0;
+        if ep > 0 && ep % log_every == 0 {
+            println!("Mean Score : {:.3}", score_sum / log_every as f32);
+            score_sum = 0.0;
         }
-        let eps = (1.0 - ep as f32 / num_episodes as f32) * start_epsilon
-            + (ep as f32 / num_episodes as f32) * final_epsilon;
+        // linear ε-decay
+        let eps = eps_start * (1.0 - ep as f32 / num_episodes as f32)
+            + eps_final * (ep as f32 / num_episodes as f32);
 
         let mut env = Env::default(); env.set_against_random(); env.reset();
         let mut s = env.state_description();
 
         while !env.is_game_over() {
-            // choose and step
-            let s_t = Tensor::<B,1>::from_floats(s.as_slice(), device);
-            let mask_t = Tensor::<B,1>::from(env.action_mask()).to_device(device);
-            let q_s = model.forward(s_t.clone());
-            let a = epsilon_greedy_action::<B, NUM_STATE_FEATURES, NUM_ACTIONS>(
-                &q_s, &mask_t, minus_one, plus_one, fmin_vec,
-                env.available_actions_ids(), eps, &mut rng);
+            // ────────── action ──────────
+            let q_s = model.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
+            let a = epsilon_greedy_action::<B, N_S, N_A>(
+                &q_s,
+                &Tensor::from(env.action_mask()).to_device(device),
+                minus_one, plus_one, fmin_vec,
+                env.available_actions_ids(),
+                eps, &mut rng);
 
-            let prev = env.score(); env.step_from_idx(a);
+            let prev = env.score();
+            env.step_from_idx(a);
             let r = env.score() - prev;
             let done = env.is_game_over();
             let s2 = env.state_description();
 
-            buffer.push((s, a, r, s2, done));
+            buf.push((s, a, r, s2, done));
             s = s2;
 
-            if buffer.storage.len() >= BATCH_SIZE {
-                let (idxs, batch) = buffer.sample_batch(BATCH_SIZE);
-                // prepare data_s, data_next same as before
-                let mut data_s = [[0.0; NUM_STATE_FEATURES]; BATCH_SIZE];
-                let mut data_next = [[0.0; NUM_STATE_FEATURES]; BATCH_SIZE];
-                for (i, (s_i, _, _, s2_i, _)) in batch.iter().enumerate() {
-                    data_s[i].copy_from_slice(s_i.as_slice());
-                    data_next[i].copy_from_slice(s2_i.as_slice());
+            // ────────── learn ───────────
+            if buf.storage.len() >= BATCH {
+                // (1) distinct weighted sample
+                let probs: Vec<f32> = buf.priorities
+                    .iter().map(|p| p.powf(per_alpha)).collect();
+                let idx = sample_distinct_weighted(&probs, BATCH, &mut rng);
+                let batch: Vec<_> = idx.iter().map(|&i| buf.storage[i].clone()).collect();
+
+                // (2) IS weights
+                let beta = BETA_END.min(
+                    BETA_START + grad_steps as f32 / BETA_FRAMES as f32
+                        * (BETA_END - BETA_START));
+                let max_p = probs.iter().copied().fold(f32::MIN, f32::max);
+                let is_w: Vec<f32> = idx.iter()
+                    .map(|&i| (probs[i] / max_p).powf(-beta))
+                    .collect();
+
+                // (3) tensor buffers
+                let mut s_buf  = [[0.0; N_S]; BATCH];
+                let mut s2_buf = [[0.0; N_S]; BATCH];
+                let mut a_buf  = [0usize; BATCH];
+                let mut r_buf  = [0.0f32; BATCH];
+                let mut d_buf  = [0.0f32; BATCH];
+
+                for j in 0..BATCH {
+                    let (s_, a_, r_, s2_, d_) = &batch[j];
+                    s_buf [j].copy_from_slice(s_.as_slice());
+                    s2_buf[j].copy_from_slice(s2_.as_slice());
+                    a_buf [j] = *a_;
+                    r_buf [j] = *r_;
+                    d_buf [j] = if *d_ { 1.0 } else { 0.0 };
                 }
-                let state_t = Tensor::<B,2>::from_data(data_s, device);
-                let next_t  = Tensor::<B,2>::from_data(data_next, device);
+                let s_t  = Tensor::<B,2>::from_data(s_buf , device);
+                let s2_t = Tensor::<B,2>::from_data(s2_buf, device);
 
-                let q_next_online = model.forward(next_t.clone());
-                let q_next_target = target.forward(next_t.clone());
+                // (4) Double-DQN target
+                let q_next_online  = model .forward(s2_t.clone());   // [B,A]
+                let best_a         = q_next_online.argmax(1);        // [B,1]
+                let q_next_target  = target.forward(s2_t);           // [B,A]
+                let q_next = q_next_target
+                    .gather(1, best_a.clone())
+                    .squeeze::<1>(1);                                   // [B]
+                let done_mask = Tensor::<B,1>::from_floats(d_buf, device);
+                let q_next = q_next * (done_mask.mul_scalar(-1.0).add_scalar(1.0));
 
-                // compute targets and td errors
-                let mut y = [[0.0;1]; BATCH_SIZE];
-                let mut errors = Vec::with_capacity(BATCH_SIZE);
-                for (j, &(_, _, r_j, _, done_j)) in batch.iter().enumerate() {
-                    let q_next = if done_j {
-                        0.0
-                    } else {
-                        let row = q_next_online.clone().slice([j..j+1]);
-                        let best_a = row.argmax(1).into_scalar() as usize;
-                        q_next_target.clone()
-                            .slice([j..j+1, best_a..best_a+1])
-                            .into_scalar()
-                    };
-                    let target_val = r_j + gamma * q_next;
-                    y[j][0] = target_val;
-                    // current Q
-                    let current_q = model.forward(state_t.clone())
-                        .slice([j..j+1, batch[j].1..batch[j].1+1])
-                        .into_scalar();
-                    errors.push(target_val - current_q);
+                let target_vec = Tensor::<B,1>::from_floats(r_buf, device)
+                    + q_next * gamma;
+
+                // (5) current Q(s,a)
+                let q_online = model.forward(s_t);
+                let mut ind_buf = [[0i64; 1]; BATCH];
+                for j in 0..BATCH {
+                    ind_buf[j][0] = a_buf[j] as i64;
                 }
-                let y_t = Tensor::<B,2>::from_data(y, device);
+                let ind = Tensor::<B, 2, Int>::from_data(ind_buf, device);
+                let q_sa = q_online
+                    .gather(1, ind)
+                    .squeeze::<1>(1);
+                let td = target_vec.clone() - q_sa;
+                let w_t = Tensor::<B,1>::from_floats(is_w.as_slice(), device);
+                let loss = (td.clone() * w_t).powf_scalar(2.0).mean();
 
-                // gather q_t and step
-                let mut q_sa = [[0.0;1]; BATCH_SIZE];
-                for (j, &(_, a_j, _, _, _)) in batch.iter().enumerate() {
-                    q_sa[j][0] = model.forward(state_t.clone())
-                        .slice([j..j+1, a_j..a_j+1])
-                        .into_scalar();
+                // (6) optimise
+                let grads = GradientsParams::from_grads(loss.backward(), &model);
+                model = opt.step(lr.into(), model, grads);
+                grad_steps += 1;
+
+                // (7) update priorities
+                let td_cpu = td.into_data().into_vec::<f32>().unwrap();
+                let new_p: Vec<f32> = td_cpu.iter()
+                    .map(|e| (e.abs() + PRIO_EPS).min(PRIO_MAX))
+                    .collect();
+                buf.update_priorities(&idx, &new_p);
+
+                // (8) target net sync
+                if grad_steps % TARGET_EVERY == 0 {
+                    target = model.clone();
                 }
-                let q_t = Tensor::<B,2>::from_data(q_sa, device);
-                let loss = (q_t - y_t).powf_scalar(2.0).mean();
-                let grad = loss.backward();
-                let grads = GradientsParams::from_grads(grad, &model);
-                model = optimizer.step(alpha.into(), model, grads);
-
-                // update priorities
-                buffer.update_priorities(&idxs, &errors);
             }
         }
-        total += env.score();
-        if ep % TARGET_UPDATE_EVERY == 0 { target = model.clone(); }
+        score_sum += env.score();
     }
-
-    println!("Mean Score : {:.3}", total / episode_stop as f32);
+    println!("Mean Score : {:.3}", score_sum / log_every as f32);
     model
 }
 

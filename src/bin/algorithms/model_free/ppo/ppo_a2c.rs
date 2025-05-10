@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
+use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -12,111 +12,112 @@ use kdam::tqdm;
 use rand::distributions::{Distribution, WeightedIndex};
 use rand::SeedableRng;
 
-pub fn episodic_ppo_a2c<
-    const NUM_STATE_FEATURES: usize,
-    const NUM_ACTIONS: usize,
-    P: Forward<B = B> + AutodiffModule<B> + Clone,  // policy network
-    V: Forward<B = B> + AutodiffModule<B> + Clone,  // value network
-    B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
-    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default,
+fn episodic_a2c<
+    const N_S: usize,
+    const N_A: usize,
+    P, V, B, Env,
 >(
-    mut policy: P,
-    mut critic: V,
-    num_episodes: usize,
-    episode_stop: usize,
-    n_step: usize,
-    gamma: f32,
-    entropy_coef: f32,
-    policy_lr: f32,
-    critic_lr: f32,
-    weight_decay: f32,
-    device: &B::Device,
+    mut policy : P,
+    mut critic : V,
+    num_episodes : usize,
+    log_every    : usize,
+    n_step       : usize,
+    gamma        : f32,
+    ent_coef     : f32,
+    lr_pol       : f32,
+    lr_val       : f32,
+    _wd          : f32,
+    device       : &B::Device,
 ) -> P
 where
-    P::InnerModule: Forward<B = B::InnerBackend>,
-    V::InnerModule: Forward<B = B::InnerBackend>,
+    B : AutodiffBackend<FloatElem = f32, IntElem = i64>,
+    P : Forward<B = B> + AutodiffModule<B> + Clone,
+    V : Forward<B = B> + AutodiffModule<B> + Clone,
+    P::InnerModule : Forward<B = B::InnerBackend>,
+    V::InnerModule : Forward<B = B::InnerBackend>,
+    Env : DeepDiscreteActionsEnv<N_S, N_A> + Display + Default,
 {
-    // two separate optimizers
-    let mut opt_pol = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
-        .init();
-    let mut opt_cri = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
-        .init();
+    let mut opt_pol = AdamConfig::new().init();
+    let mut opt_val = AdamConfig::new().init();
+    let mut rng     = Xoshiro256PlusPlus::from_entropy();
 
-    let mut rng = Xoshiro256PlusPlus::from_entropy();
-    let mut total = 0.0;
-    let mut env = Env::default();
-    env.set_against_random();
+    let mut score_sum = 0.0;
+    let mut env       = Env::default(); env.set_against_random();
 
     for ep in tqdm!(0..num_episodes) {
-        // optionally log
-        if ep > 0 && ep % episode_stop == 0 {
-            println!("Mean Score : {:.3}", total / episode_stop as f32);
-            total = 0.0;
+        if ep > 0 && ep % log_every == 0 {
+            println!("Mean Score : {:.3}", score_sum / log_every as f32);
+            score_sum = 0.0;
         }
-
-        // run one episode, collecting up to n_step transitions at a time
         env.reset();
 
-        // store (state, action, reward)
-        let mut trajectory: Vec<([f32; NUM_STATE_FEATURES], usize, f32)> = Vec::new();
+        // (state, action, reward) buffer
+        let mut traj: Vec<([f32; N_S], usize, f32)> = Vec::new();
         let mut s = env.state_description();
 
         while !env.is_game_over() {
-            // policy → distribution
-            let s_t = Tensor::<B, 1>::from_floats(s.as_slice(), device);
-            let logits = policy.forward(s_t.clone());
-            let probs = softmax(logits);
-            let p_vec: Vec<f32> = probs.clone().into_data().into_vec().unwrap();
-            let dist = WeightedIndex::new(&p_vec).unwrap();
+            // ── sample action from policy π(a|s) ─────────────────────
+            let logits = policy.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
+            let probs  = softmax(logits.clone());
+            let dist   = WeightedIndex::new(
+                &probs.clone().into_data().into_vec::<f32>().unwrap()
+            ).unwrap();
             let a = dist.sample(&mut rng);
 
-            let prev = env.score();
-            env.step_from_idx(a);
-            let r = env.score() - prev;
-            let s2 = env.state_description();
+            // ── env step ─────────────────────────────────────────────
+            let prev = env.score(); env.step_from_idx(a);
+            let r    = env.score() - prev;
+            let s2   = env.state_description();
 
-            trajectory.push((s, a, r));
+            traj.push((s, a, r));
             s = s2;
 
-            if trajectory.len() >= n_step || env.is_game_over() {
+            // ── update every n-step or on terminal ──────────────────
+            if traj.len() >= n_step || env.is_game_over() {
+                // bootstrap value for last state
                 let mut r = if env.is_game_over() {
                     0.0
                 } else {
-                    let s_tn = Tensor::<B, 1>::from_floats(s.as_slice(), device);
-                    critic.forward(s_tn).slice([0..1]).into_scalar()
+                    critic.forward(
+                        Tensor::<B,1>::from_floats(s.as_slice(), device)
+                    ).slice([0..1]).into_scalar()
                 };
 
-                for &(state, action, reward) in trajectory.iter().rev() {
+                // iterate backwards over the collected segment
+                for (state, action, reward) in traj.iter().rev() {
                     r = reward + gamma * r;
 
-                    let s_tc = Tensor::<B, 1>::from_floats(state.as_slice(), device);
-                    let v_s = critic.forward(s_tc.clone()).slice([0..1]);
-                    let loss_cri = (v_s - Tensor::from([r]).to_device(device)).powf_scalar(2.0);
-                    let grad_cri = loss_cri.backward();
-                    let grads_cri = GradientsParams::from_grads(grad_cri, &critic);
-                    critic = opt_cri.step(critic_lr.into(), critic, grads_cri);
+                    let s_t = Tensor::<B,1>::from_floats(state.as_slice(), device);
 
-                    let baseline = critic.forward(s_tc.clone()).slice([0..1]).detach().into_scalar();
+                    // ── critic update (MSE) ────────────────────────
+                    let v_pred = critic.forward(s_t.clone()).slice([0..1]);
+                    let loss_v = (v_pred.clone() - Tensor::from([r]).to_device(device))
+                        .powf_scalar(2.0);
+                    let grad_v = loss_v.backward();
+                    let grads_v = GradientsParams::from_grads(grad_v, &critic);
+                    critic = opt_val.step(lr_val.into(), critic, grads_v);
+
+                    // ── policy update (advantage) ──────────────────
+                    let baseline = v_pred.detach().into_scalar(); // OLD value
                     let advantage = r - baseline;
-                    let logits_p = policy.forward(s_tc);
-                    let logp = log_softmax(logits_p.clone()).slice([action..action+1]);
-                    let entropy = - (softmax(logits_p.clone()) * log_softmax(logits_p)).sum();
-                    let loss_pol = logp.mul_scalar(-advantage) - entropy.mul_scalar(entropy_coef);
-                    let grad_pol = loss_pol.backward();
-                    let grads_pol = GradientsParams::from_grads(grad_pol, &policy);
-                    policy = opt_pol.step(policy_lr.into(), policy, grads_pol);
-                }
 
-                trajectory.clear();
+                    let logits_p = policy.forward(s_t.clone());
+                    let log_probs = log_softmax(logits_p.clone());
+                    let logp = log_probs.clone().slice([*action .. action + 1]);
+                    let entropy = - (softmax(logits_p.clone()) * log_probs).sum();
+
+                    let loss_p = logp.mul_scalar(-advantage) - entropy.mul_scalar(ent_coef);
+                    let grad_p = loss_p.backward();
+                    let grads_p = GradientsParams::from_grads(grad_p, &policy);
+                    policy = opt_pol.step(lr_pol.into(), policy, grads_p);
+                }
+                traj.clear();
             }
         }
-
-        total += env.score();
+        score_sum += env.score();
     }
 
-    println!("Mean Score : {:.3}", total / episode_stop as f32);
+    println!("Mean Score : {:.3}", score_sum / log_every as f32);
     policy
 }
 
@@ -133,7 +134,7 @@ pub fn run_ppo_a2c<
 
     // hyperparameters
     let params = DeepLearningParams::default();
-    let trained = episodic_ppo_a2c::<
+    let trained = episodic_a2c::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,
         _,

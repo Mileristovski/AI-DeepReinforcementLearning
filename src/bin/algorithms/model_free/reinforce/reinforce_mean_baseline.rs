@@ -37,7 +37,9 @@ where
     M::InnerModule: Forward<B = B::InnerBackend>,
     Env: DeepDiscreteActionsEnv<N_S, N_A> + Display + Default,
 {
-    let mut opt = AdamConfig::new().init();
+    let mut opt = AdamConfig::new()
+        // .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
+        .init();
     let mut rng   = Xoshiro256PlusPlus::from_entropy();
     let mut score_sum = 0.0f32;
 

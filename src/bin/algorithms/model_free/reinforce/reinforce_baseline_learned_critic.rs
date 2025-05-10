@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
+use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -27,7 +27,7 @@ pub fn episodic_actor_critic<
     gamma: f32,
     policy_lr: f32,
     critic_lr: f32,
-    weight_decay: f32,
+    _weight_decay: f32,
     device: &B::Device,
 ) -> P
 where
@@ -35,10 +35,10 @@ where
     V::InnerModule: Forward<B = B::InnerBackend>,
 {
     let mut opt_pol = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
+        // .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
     let mut opt_cri = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
+        // .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();

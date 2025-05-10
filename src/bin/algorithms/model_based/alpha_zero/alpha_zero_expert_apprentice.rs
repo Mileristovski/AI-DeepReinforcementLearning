@@ -1,5 +1,5 @@
 use burn::module::AutodiffModule;
-use burn::optim::{Optimizer, decay::WeightDecayConfig, GradientsParams, AdamConfig};
+use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand::distributions::WeightedIndex;
@@ -130,17 +130,16 @@ pub fn episodic_alpha_zero_expert_apprentice<
     episode_stop: usize,
     games_per_iteration: usize,
     mcts_sims: usize,
-    apprentice_prob: f32,
     c: f32,
     learning_rate: f32,
-    weight_decay: f32,
+    _weight_decay: f32,
     device: &B::Device,
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
 {
     let mut optimizer = AdamConfig::new()
-        .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
+        // .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut total_score = 0.0;
@@ -166,19 +165,12 @@ where
                 let s = env.state_description();
                 let s_t = Tensor::<B, 1>::from_floats(s.as_slice(), device);
                 let logits = model.forward(s_t);
-                let logp = log_softmax(logits);
-                let pi_net: Vec<f32> = logp
-                    .clone()
-                    .exp()
-                    .into_data()
-                    .into_vec::<f32>()
-                    .unwrap();
+                let (policy_logits, _value) =
+                    split_policy_value::<B, NUM_ACTIONS>(logits);     // keep just the policy part
+                let logp   = log_softmax(policy_logits);
+                let pi_net: Vec<f32> = logp.exp().into_data().into_vec::<f32>().unwrap();
 
-                let a = if rng.gen::<f32>() < apprentice_prob {
-                    WeightedIndex::new(&pi_net).unwrap().sample(&mut rng)
-                } else {
-                    WeightedIndex::new(&pi_expert).unwrap().sample(&mut rng)
-                };
+                let a = WeightedIndex::new(&pi_net).unwrap().sample(&mut rng);
 
                 trajectory.push((s, pi_expert, a));
                 env.step_from_idx(a);
@@ -235,11 +227,10 @@ pub fn run_alpha_zero_expert_apprentice<
         Env,
     >(
         model,
-        params.az_iterations,
+        params.num_episodes,
         params.episode_stop,
         params.az_self_play_games,
         params.mcts_simulations,
-        params.az_apprentice_prob,
         params.c,
         params.alpha,
         params.opt_weight_decay_penalty,
