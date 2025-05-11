@@ -10,7 +10,6 @@ pub type MyBackend = LibTorch;
 pub type MyAutodiffBackend = Autodiff<MyBackend>;
 pub type MyDevice = <MyBackend as Backend>::Device;
 pub type Enemy<M, B> = <M as AutodiffModule<B>>::InnerModule;
-pub const EXPORT_AT_EP: [usize; 4] = [200, 2500, 100_000, 1_000_000];
 pub const REPLAY_CAPACITY: usize = 100_000;
 pub const BATCH_SIZE: usize = 32;
 pub const TARGET_UPDATE_EVERY: usize = 1_000;

@@ -6,9 +6,10 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 use rand::distributions::{Distribution,WeightedIndex};
 use rand_distr::StandardNormal;
 use crate::services::algorithms::helpers::{run_mcts_pi, log_softmax, get_device, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, EXPORT_AT_EP};
+use crate::config::{DeepLearningParams, MyAutodiffBackend};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
+use std::time::Instant;
 use kdam::tqdm;
 use rand::prelude::IteratorRandom;
 use rand_xoshiro::rand_core::SeedableRng;
@@ -68,15 +69,14 @@ where
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut history: [f32; HS];
     let mut total = 0.0;
+    let mut total_duration = std::time::Duration::new(0, 0);
     let mut n_games= 1usize;
     
-    for _iter in tqdm!(0..=num_episodes) {
+    for _iter in tqdm!(0..num_episodes) {
         if _iter % episode_stop == 0 {
             let mean = total / n_games as f32;
-            logger.log(_iter, mean);
-            if EXPORT_AT_EP.contains(&_iter) {
-                logger.save_model(&model, _iter);
-            }
+            let mean_duration = total_duration / episode_stop as u32;
+            logger.log(_iter, mean, mean_duration);
             total = 0.0;
         }
 
@@ -84,6 +84,7 @@ where
             let mut env = Env::default();
             let mut traj = Vec::new();
 
+            let game_start = Instant::now();
             while !env.is_game_over() {
                 history = env.state_description();
 
@@ -103,6 +104,7 @@ where
             for (h, pi) in traj {
                 buffer.push((h, pi, z));
             }
+            total_duration += game_start.elapsed();
             total += env.score();
             n_games    += 1;
         }
@@ -162,6 +164,7 @@ where
         }
     }
     
+    logger.save_model(&model, num_episodes);
     println!("Mean Score : {:.3}", total / (n_games as f32));
     model
 }

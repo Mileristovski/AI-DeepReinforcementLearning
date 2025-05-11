@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::time::Instant;
 use crate::environments::env::DeepDiscreteActionsEnv;
 use burn::module::AutodiffModule;
 use burn::optim::{AdamConfig, GradientsParams, Optimizer};
@@ -44,6 +45,7 @@ where
     let mut rng = Xoshiro256PlusPlus::from_entropy();
 
     let mut total_score = 0.0;
+    let mut total_duration = std::time::Duration::new(0, 0);
     let mut env = Env::default();
     
     for ep_id in tqdm!(0..num_episodes) {
@@ -52,7 +54,8 @@ where
 
         if ep_id % episode_stop == 0 {
             let mean = total_score / episode_stop as f32;
-            logger.log(ep_id, mean);
+            let mean_duration = total_duration / episode_stop as u32;
+            logger.log(ep_id, mean, mean_duration);
             total_score = 0.0;
         }
         env.reset();
@@ -79,7 +82,8 @@ where
             decayed_epsilon,
             &mut rng
         );
-
+        
+        let game_start = Instant::now();
         while !env.is_game_over() {
             let prev_score = env.score();
             env.step_from_idx(a);
@@ -123,6 +127,7 @@ where
             a = a_p;
         }
         total_score += env.score();
+        total_duration += game_start.elapsed();
     }
     logger.save_model(&model, num_episodes);
     println!("Mean Score : {:.3}", total_score / episode_stop as f32);

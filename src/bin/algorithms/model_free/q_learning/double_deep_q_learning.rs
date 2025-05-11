@@ -4,10 +4,11 @@ use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
+use std::time::Instant;
 use kdam::tqdm;
 use rand::SeedableRng;
 use crate::services::algorithms::exports::model_free::q_learning::double_deep_q_learning::DoubleDqnLogger;
@@ -47,14 +48,13 @@ where
     let mut optimizer = AdamConfig::new().init();
     let mut rng       = Xoshiro256PlusPlus::from_entropy();
     let mut total     = 0.0;
-
+    let mut total_duration = std::time::Duration::new(0, 0);
+    
     for ep in tqdm!(0..num_episodes) {
         if ep % episode_stop == 0 {
             let mean = total / episode_stop as f32;
-            logger.log(ep, mean);
-            if EXPORT_AT_EP.contains(&ep) {
-                logger.save_model(&model, ep);
-            }
+            let mean_duration = total_duration / episode_stop as u32;
+            logger.log(ep, mean, mean_duration);
             total = 0.0;
         }
         let frac = ep as f32 / num_episodes as f32;
@@ -63,6 +63,7 @@ where
         let mut env = Env::default();
         let mut s = env.state_description();
 
+        let game_start = Instant::now();
         while !env.is_game_over() {
             step_count += 1;
 
@@ -113,6 +114,7 @@ where
             s = s2;
         }
         total += env.score();
+        total_duration += game_start.elapsed();
     }
     
     logger.save_model(&model, num_episodes);

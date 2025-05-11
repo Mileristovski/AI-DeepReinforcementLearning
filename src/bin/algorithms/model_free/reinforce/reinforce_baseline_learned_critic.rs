@@ -4,10 +4,11 @@ use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{get_device, log_softmax, masked_softmax, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
+use std::time::Instant;
 use kdam::tqdm;
 use rand::distributions::Distribution;
 use rand::SeedableRng;
@@ -45,14 +46,13 @@ where
 
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut total = 0.0;
+    let mut total_duration = std::time::Duration::new(0, 0);
 
-    for ep in tqdm!(0..=num_episodes) {
+    for ep in tqdm!(0..num_episodes) {
         if ep % episode_stop == 0 {
             let mean = total / episode_stop as f32;
-            logger.log(ep, mean);
-            if EXPORT_AT_EP.contains(&ep) {
-                logger.save_model(&policy, ep);
-            }
+            let mean_duration = total_duration / episode_stop as u32;
+            logger.log(ep, mean, mean_duration);
             total = 0.0;
         }
 
@@ -61,7 +61,8 @@ where
 
         let mut trajectory: Vec<([f32; NUM_STATE_FEATURES], usize, f32)> = Vec::new();
         let mut s = env.state_description();
-
+        
+        let game_start = Instant::now();
         while !env.is_game_over() {
             // policy forward
             let s_t = Tensor::<B, 1>::from_floats(s.as_slice(), device);
@@ -83,6 +84,7 @@ where
 
             trajectory.push((s, a, r));
         }
+        total_duration += game_start.elapsed();
         total += env.score();
 
         // compute returns G_t
@@ -114,6 +116,7 @@ where
         }
     }
 
+    logger.save_model(&policy, num_episodes);
     println!("Mean Score : {:.3}", total / (episode_stop as f32));
     policy
 }

@@ -9,6 +9,7 @@ use chrono::Local;
 pub struct RecordBase {
     pub episode: usize,
     pub mean_score: f32,
+    pub mean_duration: std::time::Duration,
     pub total_elapsed_secs: f64,
     pub interval_elapsed_secs: f64,
 }
@@ -48,13 +49,14 @@ impl BaseLogger {
     }
 
     /// Log base metrics. Returns the run directory for further use.
-    pub fn make_base(&mut self, episode: usize, mean_score: f32) -> RecordBase {
+    pub fn make_base(&mut self, episode: usize, mean_score: f32, mean_duration: std::time::Duration
+    ) -> RecordBase {
         use std::time::Instant;
         let now      = Instant::now();
         let total    = now.duration_since(self.start_time).as_secs_f64();
         let interval = now.duration_since(self.last_log_time).as_secs_f64();
         self.last_log_time = now;
-        RecordBase { episode, mean_score, total_elapsed_secs: total, interval_elapsed_secs: interval }
+        RecordBase { episode, mean_score, mean_duration, total_elapsed_secs: total, interval_elapsed_secs: interval }
     }
 
 

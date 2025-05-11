@@ -4,10 +4,11 @@ use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, sample_distinct_weighted, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, CAPACITY, BATCH, TARGET_EVERY, PRIO_EPS, PRIO_MAX, BETA_START, BETA_END, BETA_FRAMES, REPLAY_CAPACITY, BATCH_SIZE, TARGET_UPDATE_EVERY, EXPORT_AT_EP};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, CAPACITY, BATCH, TARGET_EVERY, PRIO_EPS, PRIO_MAX, BETA_START, BETA_END, BETA_FRAMES, REPLAY_CAPACITY, BATCH_SIZE, TARGET_UPDATE_EVERY};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
+use std::time::Instant;
 use kdam::tqdm;
 use rand::SeedableRng;
 use crate::services::algorithms::exports::model_free::q_learning::double_deep_q_learning_with_per::DqnPerLogger;
@@ -80,15 +81,14 @@ where
 
     let mut rng        = Xoshiro256PlusPlus::from_entropy();
     let mut score_sum  = 0.0;
+    let mut total_duration = std::time::Duration::new(0, 0);
     let mut grad_steps = 0usize;
 
-    for ep in tqdm!(0..=num_episodes) {
+    for ep in tqdm!(0..num_episodes) {
          if ep % log_every == 0 {
             let mean = score_sum / log_every as f32;
-            logger.log(ep, mean);
-            if EXPORT_AT_EP.contains(&ep) {
-                logger.save_model(&model, ep);
-            }
+             let mean_duration = total_duration / log_every as u32;
+             logger.log(ep, mean, mean_duration);
              score_sum = 0.0;
         }
         // linear ε-decay
@@ -98,6 +98,7 @@ where
         let mut env = Env::default();
         let mut s = env.state_description();
 
+        let game_start = Instant::now();
         while !env.is_game_over() {
             // ────────── action ──────────
             let q_s = model.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
@@ -197,8 +198,11 @@ where
                 }
             }
         }
+        total_duration += game_start.elapsed();
         score_sum += env.score();
     }
+    
+    logger.save_model(&model, num_episodes);
     println!("Mean Score : {:.3}", score_sum / log_every as f32);
     model
 }

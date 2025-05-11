@@ -4,10 +4,11 @@ use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{softmax, log_softmax, get_device, test_trained_model, masked_softmax};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
+use std::time::Instant;
 use kdam::tqdm;
 use rand::distributions::{Distribution, WeightedIndex};
 use rand::SeedableRng;
@@ -44,23 +45,21 @@ where
     let mut rng     = Xoshiro256PlusPlus::from_entropy();
 
     let mut score_sum = 0.0;
+    let mut total_duration = std::time::Duration::new(0, 0);
     let mut env       = Env::default(); 
 
-    for ep in tqdm!(0..=num_episodes) {
+    for ep in tqdm!(0..num_episodes) {
         if ep % log_every == 0 {
             let mean = score_sum / log_every as f32;
-            logger.log(ep, mean);
-            if EXPORT_AT_EP.contains(&ep) {
-                logger.save_model(&policy, ep);
-            }
-            if ep != num_episodes {
-                score_sum = 0.0;
-            }
+            let mean_duration = total_duration / log_every as u32;
+            logger.log(ep, mean, mean_duration);
+            score_sum = 0.0;
         }
 
         let mut traj: Vec<([f32; N_S], usize, f32)> = Vec::new();
         let mut s = env.state_description();
 
+        let game_start = Instant::now();
         while !env.is_game_over() {
             let logits = policy.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
             let mask_array = env.action_mask();  // [48] of 0.0 or 1.0
@@ -118,10 +117,12 @@ where
                 traj.clear();
             }
         }
+        total_duration += game_start.elapsed();
         score_sum += env.score();
         env.reset();
     }
 
+    logger.save_model(&policy, num_episodes);
     println!("Mean Score : {:.3}", score_sum / (log_every+1) as f32);
     policy
 }

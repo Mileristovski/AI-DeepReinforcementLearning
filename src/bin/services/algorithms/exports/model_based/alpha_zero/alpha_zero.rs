@@ -49,22 +49,23 @@ impl AlphaZeroLogger {
     }
 
     /// Log once per `episode_stop` iterations
-    pub fn log(&mut self, iteration: usize, mean_score: f32) {
-        let base_metrics: RecordBase = self.base.make_base(iteration, mean_score);
+    pub fn log(&mut self, episode: usize, mean_score: f32, mean_duration: std::time::Duration) {
+        let base: RecordBase = self.base.make_base(episode, mean_score, mean_duration);
         let run_dir = self.base.run_dir().clone();
 
         println!(
-            "AlphaZero Mean Score: {:.3} (iter {} — {:.2?} elapsed)",
+            "Alpha-Zero Mean Score: {:.3} / Mean Duration {:.3} (ep {} — {:.2?} elapsed)",
             mean_score,
-            iteration,
-            std::time::Duration::from_secs_f64(base_metrics.interval_elapsed_secs)
+            mean_duration.as_secs_f32(),
+            episode,
+            std::time::Duration::from_secs_f64(base.interval_elapsed_secs)
         );
 
         let rec = AlphaZeroCsvRecord(
-            base_metrics.episode,
-            base_metrics.mean_score,
-            base_metrics.total_elapsed_secs,
-            base_metrics.interval_elapsed_secs,
+            base.episode,
+            base.mean_score,
+            base.total_elapsed_secs,
+            base.interval_elapsed_secs,
             self.num_iterations,
             self.episode_stop,
             self.games_per_iteration,

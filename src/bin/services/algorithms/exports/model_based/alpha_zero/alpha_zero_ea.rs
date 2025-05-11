@@ -49,14 +49,15 @@ impl AlphaZeroExpertLogger {
     }
 
     /// Log once per `episode_stop` iterations
-    pub fn log(&mut self, iteration: usize, mean_score: f32) {
-        let base_metrics: RecordBase = self.base.make_base(iteration, mean_score);
+    pub fn log(&mut self, episode: usize, mean_score: f32, mean_duration: std::time::Duration) {
+        let base_metrics: RecordBase = self.base.make_base(episode, mean_score, mean_duration);
         let run_dir = self.base.run_dir().clone();
 
         println!(
-            "AlphaZero-Expert Mean Score: {:.3} (iter {} — {:.2?} elapsed)",
+            "Alpha-Zero-EA Mean Score: {:.3} / Mean Duration {:.3} (ep {} — {:.2?} elapsed)",
             mean_score,
-            iteration,
+            mean_duration.as_secs_f32(),
+            episode,
             std::time::Duration::from_secs_f64(base_metrics.interval_elapsed_secs)
         );
 

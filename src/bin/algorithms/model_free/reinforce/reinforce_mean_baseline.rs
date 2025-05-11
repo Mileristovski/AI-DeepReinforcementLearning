@@ -7,8 +7,8 @@ use rand::distributions::{Distribution, WeightedIndex};
 use rand::prelude::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use std::fmt::Display;
-
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
+use std::time::Instant;
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::services::algorithms::exports::model_free::reinforce::reinforce_mean_baseline::ReinforceBaselineLogger;
 use crate::services::algorithms::helpers::{
@@ -44,15 +44,14 @@ where
         .init();
     let mut rng   = Xoshiro256PlusPlus::from_entropy();
     let mut score_sum = 0.0f32;
+    let mut total_duration = std::time::Duration::new(0, 0);
 
     // each episode ---------------------------------------------------------
-    for ep in tqdm!(0..=num_episodes) {
+    for ep in tqdm!(0..num_episodes) {
         if ep % episode_stop == 0 {
             let mean = score_sum / episode_stop as f32;
-            logger.log(ep, mean);
-            if EXPORT_AT_EP.contains(&ep) {
-                logger.save_model(&model, ep);
-            }
+            let mean_duration = total_duration / episode_stop as u32;
+            logger.log(ep, mean, mean_duration);
             score_sum = 0.0;
         }
 
@@ -61,6 +60,7 @@ where
         // (state, mask, action, reward) per time‑step ----------------------
         let mut traj: Vec<([f32; N_S], [f32; N_A], usize, f32)> = Vec::new();
 
+        let game_start = Instant::now();
         while !env.is_game_over() {
             let s = env.state_description();
             let mask_arr = env.action_mask();
@@ -78,6 +78,7 @@ where
 
             traj.push((s, mask_arr, a, r));
         }
+        total_duration += game_start.elapsed();
         score_sum += env.score();
 
         // Monte‑Carlo returns ---------------------------------------------
@@ -107,7 +108,7 @@ where
             model = opt.step(lr.into(), model, grads);
         }
     }
-
+    logger.save_model(&model, num_episodes);
     println!("Mean Score : {:.3}", score_sum / episode_stop as f32);
     model
 }

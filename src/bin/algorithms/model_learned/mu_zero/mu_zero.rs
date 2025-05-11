@@ -7,8 +7,8 @@ use rand::distributions::{Distribution, WeightedIndex};
 use rand::prelude::{IteratorRandom, SeedableRng};
 use rand_xoshiro::Xoshiro256PlusPlus;
 use std::fmt::Display;
-
-use crate::config::{DeepLearningParams, MyAutodiffBackend, EXPORT_AT_EP};
+use std::time::Instant;
+use crate::config::{DeepLearningParams, MyAutodiffBackend};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::services::algorithms::exports::model_learned::mu_zero::mu_zero::MuZeroLogger;
 use crate::services::algorithms::helpers::{run_mcts_pi, get_device, test_trained_model, masked_log_softmax};
@@ -73,16 +73,18 @@ where
     let mut rng = Xoshiro256PlusPlus::from_entropy();
 
     // bookkeeping ----------------------------------------------------------
-    let mut total_score  = 0.0f32;   // sum over *games*
-    let mut games_count  = 0usize;   // #games so far in current block
+    let mut total_score  = 0.0f32;   
+    let mut total_duration = std::time::Duration::new(0, 0);
+    let mut games_count  = 0usize;   
 
     // training loop --------------------------------------------------------
-    for ep in tqdm!(0..=num_episodes) {
+    for ep in tqdm!(0..num_episodes) {
         // ── Self‑play block ────────────────────────────────────────────
         for _ in 0..games_per_iter {
             let mut env   = Env::default();
 
             let mut traj = Vec::new();
+            let game_start = Instant::now();
             while !env.is_game_over() {
                 let history = env.state_description();
 
@@ -96,7 +98,8 @@ where
             }
             let z = env.score();                 // raw final score ------------
             for (h, pi_root) in traj { rb.push((h, pi_root, z)); }
-
+            
+            total_duration += game_start.elapsed();
             total_score += z;
             games_count += 1;
         }
@@ -104,10 +107,8 @@ where
         // every episode_stop iters → print true mean and reset -------------
         if ep % episode_stop == 0 {
             let mean = total_score / episode_stop as f32;
-            logger.log(ep, mean);
-            if EXPORT_AT_EP.contains(&ep) {
-                logger.save_model(&model, ep);
-            }
+            let mean_duration = total_duration / episode_stop as u32;
+            logger.log(ep, mean, mean_duration);
             total_score = 0.0;
         }
 
@@ -147,6 +148,7 @@ where
 
     // final print if loop didn’t finish on a block boundary ---------------
     if games_count > 0 {
+        logger.save_model(&model, num_episodes);
         println!("Mean Score : {:.3}", total_score / games_count as f32);
     }
     model

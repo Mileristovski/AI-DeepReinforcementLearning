@@ -43,13 +43,14 @@ impl ReinforceLogger {
     }
 
     /// Log once per `log_every` episodes
-    pub fn log(&mut self, episode: usize, mean_score: f32) {
-        let base: RecordBase = self.base.make_base(episode, mean_score);
+    pub fn log(&mut self, episode: usize, mean_score: f32, mean_duration: std::time::Duration) {
+        let base: RecordBase = self.base.make_base(episode, mean_score, mean_duration);
         let run_dir = self.base.run_dir().clone();
 
         println!(
-            "REINFORCE Mean Score: {:.3} (ep {} — {:.2?} elapsed)",
+            "REINFORCE Mean Score: {:.3} / Mean Duration {:.3} (ep {} — {:.2?} elapsed)",
             mean_score,
+            mean_duration
             episode,
             std::time::Duration::from_secs_f64(base.interval_elapsed_secs)
         );

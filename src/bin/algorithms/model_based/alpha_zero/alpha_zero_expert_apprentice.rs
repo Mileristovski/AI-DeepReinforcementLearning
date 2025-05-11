@@ -9,11 +9,12 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 use kdam::tqdm;
 use rand::distributions::Distribution;
 
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, split_policy_value, test_trained_model};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use std::fmt::Display;
+use std::time::Instant;
 use crate::services::algorithms::exports::model_based::alpha_zero::alpha_zero_ea::AlphaZeroExpertLogger;
 
 struct Node<const A: usize> {
@@ -193,13 +194,12 @@ where
         .init();
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut total_score = 0.0;
-    for ep in tqdm!(0..=num_iterations) {
+    let mut total_duration = std::time::Duration::new(0, 0);
+    for ep in tqdm!(0..num_iterations) {
         if ep % episode_stop == 0 {
             let mean = total_score / episode_stop as f32;
-            logger.log(ep, mean);
-            if EXPORT_AT_EP.contains(&ep) {
-                logger.save_model(&model, ep);
-            }
+            let mean_duration = total_duration / episode_stop as u32;
+            logger.log(ep, mean, mean_duration);
             total_score = 0.0;
         }
 
@@ -209,6 +209,7 @@ where
             let mut env = Env::default();
 
             let mut trajectory = Vec::new();
+            let game_start = Instant::now();
             while !env.is_game_over() {
                 let pi_expert =
                     run_mcts_pi::<NUM_STATE_FEATURES, NUM_ACTIONS, Env, _>(
@@ -240,7 +241,7 @@ where
             for (s, pi_e, _) in trajectory {
                 training.push((s, pi_e, z));
             }
-
+            total_duration += game_start.elapsed();
             total_score += env.score();
         }
 
@@ -262,7 +263,8 @@ where
             model = optimizer.step(learning_rate.into(), model, grads);
         }
     }
-
+    
+    logger.save_model(&model, num_iterations);
     println!("Mean Score : {:.3}", total_score / episode_stop as f32);
     model
 }

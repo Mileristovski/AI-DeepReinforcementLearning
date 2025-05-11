@@ -47,16 +47,17 @@ impl SarsaLogger {
         }
     }
 
-    pub fn log(&mut self, episode: usize, mean_score: f32) {
+    pub fn log(&mut self, episode: usize, mean_score: f32, mean_duration: std::time::Duration) {
         // Build timing info but don't write yet
-        let base = self.base.make_base(episode, mean_score);
+        let base = self.base.make_base(episode, mean_score, mean_duration);
         let run_dir = self.base.run_dir().clone();   // path we’ll write to
         let elapsed = base.interval_elapsed_secs;
 
         // Print
         println!(
-            "Mean Score: {:.3} (episode {} — {:.2?} elapsed)",
-            mean_score, episode, elapsed
+            "Mean Score: {:.3} / Mean Duration {:.3} (episode {} — {:.2?} elapsed)",
+            mean_score, mean_duration.as_secs_f32()
+            , episode, elapsed
         );
 
         // One flat row with ALL columns

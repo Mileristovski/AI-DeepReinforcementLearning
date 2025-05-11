@@ -4,10 +4,11 @@ use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
+use std::time::Instant;
 use kdam::tqdm;
 use rand::distributions::{Distribution, WeightedIndex};
 use rand::SeedableRng;
@@ -38,16 +39,15 @@ where
     let mut opt  = AdamConfig::new().init();
     let mut rng  = Xoshiro256PlusPlus::from_entropy();
     let mut mean = 0.0f32;
+    let mut total_duration = std::time::Duration::new(0, 0);
 
     // “minus ∞” used for masking illegal actions
     let neg_inf = Tensor::<B,1>::from_floats([-1e9; N_A], device);
 
-    for ep in tqdm!(0..=num_episodes) {
+    for ep in tqdm!(0..num_episodes) {
         if ep % log_every == 0 {
-            logger.log(ep, mean / log_every as f32);
-            if EXPORT_AT_EP.contains(&ep) {
-                logger.save_model(&model, ep);
-            }
+            let mean_duration = total_duration / log_every as u32;
+            logger.log(ep, mean, mean_duration);
             mean = 0.0;
         }
 
@@ -58,6 +58,7 @@ where
         let mut s = env.state_description();
 
         //------------------ roll-out ------------------------------------
+        let game_start = Instant::now();
         while !env.is_game_over() {
             let logits = model.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
 
@@ -104,10 +105,11 @@ where
             let grads  = GradientsParams::from_grads(loss.backward(), &model);
             model      = opt.step(lr.into(), model, grads);
         }
-
+        total_duration += game_start.elapsed();
         mean += env.score();
     }
 
+    logger.save_model(&model, num_episodes);
     println!("Mean Score : {:.3}", mean / log_every as f32);
     model
 }
