@@ -139,7 +139,7 @@ pub fn run_episodic_semi_gradient_sarsa<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display
->(env_name: &str,parameters: DeepLearningParams)
+>(env_name: &str,parameters: &DeepLearningParams)
 {
     // Set the device for training
     let device: MyDevice = get_device();
@@ -184,9 +184,11 @@ pub fn run_episodic_semi_gradient_sarsa<
         );
 
     // Let's play some games (press enter to show the next game)
-    test_trained_model::<
-        NUM_STATE_FEATURES,
-        NUM_ACTIONS,
-        Env
-    >(&device, model);
+    if parameters.run_test {
+        test_trained_model::<
+            NUM_STATE_FEATURES,
+            NUM_ACTIONS,
+            Env
+        >(&device, model);
+    }
 }

@@ -122,7 +122,7 @@ pub fn run_random_rollout<
     const N_S: usize,
     const N_A: usize,
     Env: DeepDiscreteActionsEnv<N_S, N_A> + Clone + Default + Display,
->(_env_name: &str,p: DeepLearningParams) {
+>(_env_name: &str,p: &DeepLearningParams) {
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(p.rng_seed);
 
     episodic_random_rollout::<N_S, N_A, Env>(
@@ -131,5 +131,7 @@ pub fn run_random_rollout<
         p.mcts_rollouts_per_action,
         &mut rng,
     );
-    test_random_rollout::<N_S, N_A, Env>(p.mcts_rollouts_per_action, &mut rng);
+    if p.run_test {
+        test_random_rollout::<N_S, N_A, Env>(p.mcts_rollouts_per_action, &mut rng);
+    }
 }

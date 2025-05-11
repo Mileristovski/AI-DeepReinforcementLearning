@@ -207,12 +207,15 @@ pub fn run_mcts<
     Env: DeepDiscreteActionsEnv<S, A> + Display + Default + Clone,
 >(
     env_name: &str,
-    params: DeepLearningParams,
+    params: &DeepLearningParams,
 ) {
     let _device: MyDevice = get_device();
     println!("Using device: {:?}", _device);
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(params.rng_seed);
 
     episodic_mcts::<S, A, Env>(&params, env_name, &mut rng);
-    test_mcts::<S, A, Env>(&params, &mut rng);
+    
+    if params.run_test {
+        test_mcts::<S, A, Env>(&params, &mut rng);
+    }
 }

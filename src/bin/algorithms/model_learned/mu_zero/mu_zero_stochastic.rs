@@ -163,7 +163,7 @@ where
             model = optimizer.step(learning_rate.into(), model, grads);
         }
     }
-    
+
     logger.save_model(&model, num_episodes);
     println!("Mean Score : {:.3}", total / (n_games as f32));
     model
@@ -173,7 +173,7 @@ pub fn run_muzero_stochastic<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default + Clone,
->(env_name: &str,params: DeepLearningParams) {
+>(env_name: &str,params: &DeepLearningParams) {
     let device = get_device();
     println!("Using device: {:?}", device);
     
@@ -196,5 +196,7 @@ pub fn run_muzero_stochastic<
         &mut logger
     );
 
-    test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);
+    if params.run_test{
+        test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);
+    }
 }

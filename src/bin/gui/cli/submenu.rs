@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::io;
 use crate::gui::cli::common::{reset_screen, user_choice};
-use crate::services::envs::run_envs::{run_env_heuristic, run_benchmark_random_agents};
+use crate::services::envs::run_envs::{run_env_heuristic, run_benchmark_random_agents, run_tests_all_algorithms, run_tests_model_free_algorithms, run_tests_model_based_algorithms, run_tests_model_learned_algorithms};
 use crate::algorithms::model_free::sarsa::run_episodic_semi_gradient_sarsa;
 use crossterm::terminal::disable_raw_mode;
 use crate::algorithms::model_based::alpha_zero::alpha_zero::run_alpha_zero;
@@ -22,34 +22,73 @@ use crate::algorithms::model_free::reinforce::reinforce_mean_baseline::run_reinf
 use crate::config::DeepLearningParams;
 use crate::environments::env::DeepDiscreteActionsEnv;
 
+pub fn submenu_tests<
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    const NUM_STATES: usize,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
+>(env_name: &str)
+{
+    loop {
+        let options = vec![
+            "Test all algorithms",
+            "Test model-free algorithms",
+            "Test model-based algorithms",
+            "Test model-learned algorithms",
+            "Back",
+        ];
+
+        let message = format!("Testing menu for {}", env_name);
+        let selected_index = user_choice(options.clone(), &message);
+        let mut stdout = io::stdout();
+        reset_screen(&mut stdout, env_name);
+
+        match selected_index {
+            0 => run_tests_all_algorithms::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name),
+            1 => run_tests_model_free_algorithms::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name),
+            2 => run_tests_model_based_algorithms::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name),
+            3 => run_tests_model_learned_algorithms::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name),
+            4 => break,
+            _ => {}
+        }
+    }
+    disable_raw_mode().unwrap();
+}
+
+// ─────────────────────────────────────────────────────────────
+//  PATCH: extend the first-level submenu to point to the new one
+// ─────────────────────────────────────────────────────────────
 pub fn submenu<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     const NUM_STATES: usize,
-    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display
->(env: &mut Env, env_name: &str) {
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
+>(env: &mut Env, env_name: &str)
+{
     let mut from_random = true;
-    
+
     loop {
         let options = vec![
             if from_random { "Random is on, turn random off" } else { "Random is off, Turn random on" },
             "Heuristic",
             "Train a model from the env",
             "Benchmark",
-            "Back"
+            "Group tests",
+            "Back",
         ];
-        
+
         let message = format!("Menu for {}", env_name);
         let selected_index = user_choice(options.clone(), &message);
         let mut stdout = io::stdout();
         reset_screen(&mut stdout, env_name);
 
         match selected_index {
-            0 => { from_random = !from_random; }
-            1 => { run_env_heuristic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env, options[selected_index], from_random); },
-            2 => { submenu_drl::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name); },
-            3 => { run_benchmark_random_agents::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env, options[selected_index], from_random); },
-            4 => { break; }
+            0 => from_random = !from_random,
+            1 => run_env_heuristic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env, options[selected_index], from_random),
+            2 => submenu_drl::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name),
+            3 => run_benchmark_random_agents::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env, options[selected_index], from_random),
+            4 => submenu_tests::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name),   // ← hook to new submenu
+            5 => break,
             _ => {}
         }
     }
@@ -90,22 +129,22 @@ pub fn submenu_drl<
         let params: DeepLearningParams = DeepLearningParams::default();
 
         match selected_index {
-            0 => { run_episodic_semi_gradient_sarsa::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            1 => { run_tabular_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name, params); },
-            2 => { run_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            3 => { run_double_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            4 => { run_double_deep_q_learning_er::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            5 => { run_double_dqn_per::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            6 => { run_reinforce::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            7 => { run_reinforce_baseline::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            8 => { run_reinforce_actor_critic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            9 => { run_ppo_a2c::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            10 => { run_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            11 => { run_mcts::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            12 => { run_alpha_zero_expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            13 => { run_alpha_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            14 => { run_mu_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
-            15 => { run_muzero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            0 => { run_episodic_semi_gradient_sarsa::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            1 => { run_tabular_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name, &params); },
+            2 => { run_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            3 => { run_double_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name,&params); },
+            4 => { run_double_deep_q_learning_er::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            5 => { run_double_dqn_per::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            6 => { run_reinforce::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            7 => { run_reinforce_baseline::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            8 => { run_reinforce_actor_critic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            9 => { run_ppo_a2c::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            10 => { run_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            11 => { run_mcts::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            12 => { run_alpha_zero_expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            13 => { run_alpha_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            14 => { run_mu_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            15 => { run_muzero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
             16 => { break; }
             _ => {}
         }

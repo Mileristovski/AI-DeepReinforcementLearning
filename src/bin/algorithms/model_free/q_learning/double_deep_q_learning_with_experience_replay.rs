@@ -175,7 +175,7 @@ pub fn run_double_deep_q_learning_er<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
->(env_name: &str,params: DeepLearningParams) {
+>(env_name: &str,params: &DeepLearningParams) {
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
 
@@ -208,5 +208,7 @@ pub fn run_double_deep_q_learning_er<
         &mut logger
     );
 
-    test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);
+    if params.run_test {
+        test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);
+    }
 }

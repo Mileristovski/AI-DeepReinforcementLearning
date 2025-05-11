@@ -273,7 +273,7 @@ pub fn run_alpha_zero_expert_apprentice<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default + Clone,
->(env_name: &str,params: DeepLearningParams) {
+>(env_name: &str,params: &DeepLearningParams) {
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
 
@@ -301,5 +301,7 @@ pub fn run_alpha_zero_expert_apprentice<
         &mut logger,
     );
 
-    test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);
+    if params.run_test {
+        test_trained_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(&device, trained);
+    }
 }

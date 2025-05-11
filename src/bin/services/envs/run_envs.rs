@@ -6,6 +6,28 @@ use std::thread::sleep;
 use std::time::Duration;
 use std::time::Instant;
 use rand::prelude::IteratorRandom;
+// model-free
+use crate::algorithms::model_free::sarsa::run_episodic_semi_gradient_sarsa;
+use crate::algorithms::model_free::q_learning::tabular_q_learning::run_tabular_q_learning;
+use crate::algorithms::model_free::q_learning::deep_q_learning::run_deep_q_learning;
+use crate::algorithms::model_free::q_learning::double_deep_q_learning::run_double_deep_q_learning;
+use crate::algorithms::model_free::q_learning::double_deep_q_learning_with_experience_replay::run_double_deep_q_learning_er;
+use crate::algorithms::model_free::q_learning::double_deep_q_learning_with_prioritized_experience_replay::run_double_dqn_per;
+use crate::algorithms::model_free::reinforce::reinforce::run_reinforce;
+use crate::algorithms::model_free::reinforce::reinforce_mean_baseline::run_reinforce_baseline;
+use crate::algorithms::model_free::reinforce::reinforce_baseline_learned_critic::run_reinforce_actor_critic;
+use crate::algorithms::model_free::ppo::ppo_a2c::run_ppo_a2c;
+
+// model-based
+use crate::algorithms::model_based::monte_carlo::monte_carlo_random_rollout::run_random_rollout;
+use crate::algorithms::model_based::monte_carlo::monte_carlo_tree_search_uct::run_mcts;
+use crate::algorithms::model_based::alpha_zero::alpha_zero_expert_apprentice::run_alpha_zero_expert_apprentice;
+use crate::algorithms::model_based::alpha_zero::alpha_zero::run_alpha_zero;
+
+// model-learned
+use crate::algorithms::model_learned::mu_zero::mu_zero::run_mu_zero;
+use crate::algorithms::model_learned::mu_zero::mu_zero_stochastic::run_muzero_stochastic;
+use crate::config::DeepLearningParams;
 
 pub fn run_env_heuristic<
     const NUM_STATE_FEATURES: usize,
@@ -122,4 +144,75 @@ pub fn run_benchmark_random_agents<
         games_per_second
     );
     end_of_run();
+}
+
+pub fn run_tests_all_algorithms<
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    const NUM_STATES: usize,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
+>(
+    env_name: &str,
+) {
+    run_tests_model_free_algorithms::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name);
+    run_tests_model_based_algorithms::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name);
+    run_tests_model_learned_algorithms::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name);
+}
+
+/// Run only the **model-free** algorithms.
+pub fn run_tests_model_free_algorithms<
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    const NUM_STATES: usize,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
+>(
+    env_name: &str,
+) {
+    let mut params = DeepLearningParams::default();
+    params.run_test = false;
+
+    run_episodic_semi_gradient_sarsa::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_tabular_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name, &params);
+    run_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_double_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_double_deep_q_learning_er::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_double_dqn_per::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_reinforce::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_reinforce_baseline::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_reinforce_actor_critic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_ppo_a2c::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+}
+
+/// Run only the **model-based** algorithms.
+pub fn run_tests_model_based_algorithms<
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    const NUM_STATES: usize,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
+>(
+    env_name: &str,
+) {
+    let mut params = DeepLearningParams::default();
+    params.run_test = false;
+
+    run_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_mcts::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_alpha_zero_expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_alpha_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+}
+
+/// Run only the **model-learned** algorithms.
+pub fn run_tests_model_learned_algorithms<
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    const NUM_STATES: usize,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
+>(
+    env_name: &str,
+) {
+    let mut params = DeepLearningParams::default();
+    params.run_test = false;
+
+    run_mu_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    run_muzero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
 }

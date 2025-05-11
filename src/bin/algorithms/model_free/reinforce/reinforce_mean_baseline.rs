@@ -118,7 +118,7 @@ pub fn run_reinforce_baseline<
     const N_S: usize,
     const N_A: usize,
     Env: DeepDiscreteActionsEnv<N_S, N_A> + Display,
->(env_name: &str,p: DeepLearningParams) {
+>(env_name: &str,p: &DeepLearningParams) {
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
 
@@ -136,5 +136,7 @@ pub fn run_reinforce_baseline<
         &mut logger
     );
 
-    test_trained_model::<N_S, N_A, Env>(&device, trained);
+    if p.run_test {
+        test_trained_model::<N_S, N_A, Env>(&device, trained);
+    }
 }

@@ -161,7 +161,7 @@ pub fn run_mu_zero<
     const N_S: usize,
     const N_A: usize,
     Env: DeepDiscreteActionsEnv<N_S, N_A> + Display + Default + Clone,
->(env_name: &str,p: DeepLearningParams) {
+>(env_name: &str,p: &DeepLearningParams) {
     let device = get_device();
     println!("Using device: {:?}", device);
 
@@ -185,5 +185,7 @@ pub fn run_mu_zero<
         &mut logger,
     );
 
-    test_trained_model::<N_S, N_A, Env>(&device, trained);
+    if p.run_test {
+        test_trained_model::<N_S, N_A, Env>(&device, trained);
+    }
 }
