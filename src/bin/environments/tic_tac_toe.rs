@@ -149,6 +149,8 @@ impl DeepDiscreteActionsEnv<TTT_NUM_STATE_FEATURES, TTT_NUM_ACTIONS> for TicTacT
             acc + (v as usize) * 3_usize.pow(i as u32)
         })
     }
+
+    fn switch_board(&mut self) {}
 }
 
 impl Display for TicTacToeVersusRandom {

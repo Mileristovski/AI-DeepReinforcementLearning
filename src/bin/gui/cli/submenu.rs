@@ -27,7 +27,7 @@ pub fn submenu<
     const NUM_STATES: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display
 >(env: &mut Env, env_name: &str) {
-    let mut from_random = false;
+    let mut from_random = true;
     
     loop {
         let options = vec![

@@ -23,7 +23,7 @@ pub struct BobailHeuristic {
     bobail_move: bool,
     directions:  [(isize, isize, isize); 8],
     empty: f32,
-    chip_lookup: HashMap<usize, usize>,
+    pub chip_lookup: HashMap<usize, usize>,
     pub is_random_state: bool,
     against_random: bool,
     actions_lookup: [usize; BB_NUM_ACTIONS],
@@ -402,6 +402,46 @@ impl DeepDiscreteActionsEnv<BB_NUM_STATE_FEATURES, BB_NUM_ACTIONS> for BobailHeu
     fn state_index(&self) -> usize {
         panic!("Can't be implemented!")
     }
+
+    fn switch_board(&mut self) {
+        // 1. create a fresh empty board
+        let mut new_board = [0.0f32; NUM_BOARD_SIZE];
+        let mut new_lookup = HashMap::new();
+
+
+        if self.current_player == self.blue_player {
+            return
+        }
+        for idx in 0..NUM_BOARD_SIZE {
+            let val = self.board[idx] as usize;
+            if val == 0 { continue; }
+
+            let r  = idx / COLS;
+            let c  = idx % COLS;
+            let mr = ROWS - 1 - r;
+            let mc = COLS - 1 - c;
+            let m_idx = mr * COLS + mc;
+
+            // swap colours                           1-5 ↔ 6-10, Bobail unchanged
+            let new_val = match val {
+                1..=5   => (10 - val + 1) as f32,        // red   → blue
+                6..=10  => (10 - val + 1) as f32,        // blue  → red
+                11      => 11.0,                    // Bobail
+                _       => unreachable!(),
+            };
+
+            new_board[m_idx] = new_val;
+            new_lookup.insert(new_val as usize, m_idx);
+        }
+
+        // 2. commit the new position
+        self.board        = new_board;
+        self.chip_lookup  = new_lookup;
+        self.current_player = self.blue_player;
+    }
+
+
+
 }
 
 impl Display for BobailHeuristic {

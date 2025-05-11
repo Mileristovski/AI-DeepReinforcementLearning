@@ -106,6 +106,8 @@ impl DeepDiscreteActionsEnv<LINE_NUM_STATE_FEATURES, LINE_NUM_ACTIONS> for LineW
     }
 
     fn state_index(&self) -> usize { self.current_state }
+
+    fn switch_board(&mut self) {}
 }
 
 impl Display for LineWorld {

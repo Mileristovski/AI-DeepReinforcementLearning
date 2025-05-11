@@ -38,6 +38,7 @@ pub fn run_env_heuristic<
             Ok(action) => {
                 if env.available_actions().collect::<Vec<_>>().contains(&action) {
                     env.step(action);
+                    env.switch_board();
                 } else {
                     println!("Please enter a valid action");
                     let mut s = String::new();

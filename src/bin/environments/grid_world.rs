@@ -136,6 +136,8 @@ impl DeepDiscreteActionsEnv<GRID_NUM_STATE_FEATURES, GRID_NUM_ACTIONS> for GridW
     }
 
     fn state_index(&self) -> usize { self.current_state }
+
+    fn switch_board(&mut self) {}
 }
 
 impl Display for GridWorld {
