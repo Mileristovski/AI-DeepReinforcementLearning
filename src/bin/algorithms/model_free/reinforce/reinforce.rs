@@ -4,7 +4,7 @@ use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
@@ -37,19 +37,21 @@ where
 {
     let mut opt  = AdamConfig::new().init();
     let mut rng  = Xoshiro256PlusPlus::from_entropy();
-    let mut total = 0.0f32;
-    
+    let mut mean = 0.0f32;
+
     // “minus ∞” used for masking illegal actions
     let neg_inf = Tensor::<B,1>::from_floats([-1e9; N_A], device);
 
     for ep in tqdm!(0..=num_episodes) {
-        let mut env = Env::default();
-
         if ep % log_every == 0 {
-            let mean = total / log_every as f32;
             logger.log(ep, mean / log_every as f32);
-            total = 0.0;
+            if EXPORT_AT_EP.contains(&ep) {
+                logger.save_model(&model, ep);
+            }
+            mean = 0.0;
         }
+
+        let mut env = Env::default();
 
         // store (state, mask, action, reward)
         let mut traj: Vec<([f32; N_S], [f32; N_A], usize, f32)> = Vec::new();
@@ -57,10 +59,10 @@ where
 
         //------------------ roll-out ------------------------------------
         while !env.is_game_over() {
-            let logits = model.forward(Tensor::<B, 1>::from_floats(s.as_slice(), device));
+            let logits = model.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
 
-            let mask = env.action_mask();
-            let mask_t = Tensor::<B, 1>::from(mask).to_device(device);
+            let mask   = env.action_mask();
+            let mask_t = Tensor::<B,1>::from(mask).to_device(device);
 
             // masked soft-max
             let adj = logits.clone() * mask_t.clone()
@@ -69,7 +71,7 @@ where
 
             // safe sampling (skip the step if all probs are ~0)
             let p_vec = probs.clone().into_data().into_vec::<f32>().unwrap();
-            let dist = WeightedIndex::new(&p_vec)
+            let dist  = WeightedIndex::new(&p_vec)
                 .unwrap_or_else(|_| WeightedIndex::new(&[1.0; N_A]).unwrap());
             let a = dist.sample(&mut rng);
 
@@ -84,30 +86,29 @@ where
         //---------------- Monte-Carlo returns ---------------------------
         let mut g = 0.0f32;
         let mut returns = vec![0.0; traj.len()];
-        for (idx, &(_, _, _, r)) in traj.iter().rev().enumerate() {
+        for (idx, &(_,_,_,r)) in traj.iter().rev().enumerate() {
             g = r + gamma * g;
             returns[traj.len() - 1 - idx] = g;
         }
 
         //---------------- REINFORCE update ------------------------------
         for ((state, mask, action, _), g_t) in traj.into_iter().zip(returns.into_iter()) {
-            let logits = model.forward(Tensor::<B, 1>::from_floats(state.as_slice(), device));
+            let logits = model.forward(Tensor::<B,1>::from_floats(state.as_slice(), device));
 
-            let mask_t = Tensor::<B, 1>::from(mask).to_device(device);
-            let adj = logits.clone() * mask_t.clone()
+            let mask_t = Tensor::<B,1>::from(mask).to_device(device);
+            let adj    = logits.clone() * mask_t.clone()
                 + neg_inf.clone() * (mask_t.neg().add_scalar(1.0));
-            let logp = log_softmax(adj).slice([action..action + 1]);
+            let logp   = log_softmax(adj).slice([action .. action+1]);
 
-            let loss = logp.mul_scalar(-g_t);          // maximise return
-            let grads = GradientsParams::from_grads(loss.backward(), &model);
-            model = opt.step(lr.into(), model, grads);
+            let loss   = logp.mul_scalar(-g_t);          // maximise return
+            let grads  = GradientsParams::from_grads(loss.backward(), &model);
+            model      = opt.step(lr.into(), model, grads);
         }
 
-        total += env.score();
+        mean += env.score();
     }
-    
-    logger.save_model(&model, num_episodes);
-    println!("Mean Score : {:.3}", total / log_every as f32);
+
+    println!("Mean Score : {:.3}", mean / log_every as f32);
     model
 }
 
@@ -134,7 +135,7 @@ pub fn run_reinforce<
         params.num_episodes,
         params.episode_stop,
         params.gamma,
-        params.alpha, 
+        params.alpha,
         params.opt_weight_decay_penalty,
         &device,
         &mut logger
