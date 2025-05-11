@@ -1,4 +1,5 @@
 use burn::backend::{Autodiff, LibTorch};
+use burn::module::AutodiffModule;
 use burn::prelude::Backend;
 /**
 * -------------------------------------------------------------------------
@@ -8,7 +9,8 @@ use burn::prelude::Backend;
 pub type MyBackend = LibTorch;
 pub type MyAutodiffBackend = Autodiff<MyBackend>;
 pub type MyDevice = <MyBackend as Backend>::Device;
-pub const EXPORT_AT_EP: [usize; 4] = [50, 100, 100_000, 1_000_000];
+pub type Enemy<M, B> = <M as AutodiffModule<B>>::InnerModule;
+pub const EXPORT_AT_EP: [usize; 4] = [1000, 2500, 100_000, 1_000_000];
 pub const REPLAY_CAPACITY: usize = 100_000;
 pub const BATCH_SIZE: usize = 32;
 pub const TARGET_UPDATE_EVERY: usize = 1_000;
@@ -79,8 +81,8 @@ pub struct DeepLearningParams {
 impl Default for DeepLearningParams {
     fn default() -> Self {
         Self {
-            num_episodes: 1000,
-            episode_stop: 100,
+            num_episodes: 10000,
+            episode_stop: 1000,
             start_epsilon: 1.0,
             final_epsilon: 1e-5,
             

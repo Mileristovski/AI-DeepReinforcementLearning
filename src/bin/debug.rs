@@ -5,8 +5,13 @@ mod config;
 mod gui;
 
 use crate::environments::env::DeepDiscreteActionsEnv;
-use crate::environments::bobail::BobailHeuristic;
 use rand::prelude::IteratorRandom;
+use rand::thread_rng;
+use rand::prelude::*;
+use crate::config::{MyAutodiffBackend, MyDevice};
+use crate::environments::bobail::{BobailHeuristic, BB_NUM_ACTIONS, BB_NUM_STATE_FEATURES};
+use crate::services::algorithms::helpers::{get_device, load_inference_model, step_with_model};
+use crate::services::algorithms::model::MyQmlp;
 
 type GameEnv = BobailHeuristic;
 
@@ -76,6 +81,20 @@ fn display_properties(env: &mut GameEnv) {
     }
 }
 
+fn print_board_state(env: &BobailHeuristic) {
+    println!("\nBoard state:");
+    println!("{}", env);
+
+    println!("\nChip positions:");
+    for (chip_val, pos) in &env.chip_lookup {
+        println!("Chip {} at position {}", chip_val, pos);
+    }
+
+    println!("\nCurrent player: {}", env.current_player);
+}
+
+
+/*
 fn main() {
     let mut env = GameEnv::default();
     env.reset();
@@ -93,54 +112,100 @@ fn main() {
         env.step_from_idx(a);          // should never panic
     }
     println!("Random play survived without panics ✅");
-}
-/*
-    for i in 0..10 {
-        if env.is_game_over() {
-            println!("\nGame over reached early at step {}", i);
-            break;
-        }
+}*/
 
-        if let Some(action) = env.available_actions_ids().choose(&mut rand::thread_rng()) {
-            println!("\n>>> Step {}: Executing action {} <<<", i + 1, action);
-            env.step_from_idx(action);
-            if env.current_player == 1 || env.previous_player != 1 {
-                display_properties(&mut env);
-            }
-            sleep(Duration::from_millis(500));
-        } else {
-            println!("\nNo actions available at step {}", i);
-            break;
-        }
-    }
 
-    println!("\n=== Final State ===");
+
+
+fn full_dump(title: &str, env: &BobailHeuristic) {
+    println!("\n================ {title} ================");
+    println!("Current player : {}", if env.current_player == 1 { "Blue" } else { "Red" });
+    println!("Bobail’s score : {}", env.score());
     println!("{}", env);
 }
-*/
-// fn main() {
-    // let mut env = GameEnv::default();
-    // // env.is_random_state = true;
-    // env.reset();
-    // 
-    // println!("{}", env);
-    // display_properties(&mut env);
-    // env.step(1);
-    // display_properties(&mut env);
-    // println!("{}", env);
-    // 
-    // env.step(0);
-    // display_properties(&mut env);
-    // println!("{}", env);
-    //     
-    // env.step(3);
-    // display_properties(&mut env);
-    // println!("{}", env);
-// 
-    // env.step(3);
-    // display_properties(&mut env);
-    // println!("{}", env);
-    // 
-    // display_properties(&mut env);
-    // unimplemented!("This should be used as a test script")
-// }
+
+/*
+fn main() {
+    let mut env = BobailHeuristic::default();
+    env.set_against_random();
+    let mut rng = thread_rng();
+
+    // --- initial position -------------------------------------------------
+    full_dump("Initial position (Blue to move)", &env);
+
+    // --- make one legal move ---------------------------------------------
+    if let Some(action) = env.available_actions_ids().choose(&mut rng) {
+        env.step_from_idx(action);
+        full_dump("After Blue’s first move", &env);
+    }
+
+    // --- call switch_board() ---------------------------------------------
+    env.switch_board();
+    full_dump("After switch_board()", &env);
+
+    // --- make another legal move in the mirrored position ----------------
+    if let Some(action) = env.available_actions_ids().choose(&mut rng) {
+        env.step_from_idx(action);
+        full_dump("After Red’s reply (still mirrored)", &env);
+    }
+
+    // --- switch back again ------------------------------------------------
+    env.switch_board();
+    full_dump("After second switch_board()", &env);
+}*/
+
+type Env = BobailHeuristic;
+
+fn main() {
+    // ── 0. pick a device ────────────────────────────────────────────────
+    let device: MyDevice = get_device();
+    println!("Running on device: {:?}", device);
+
+    // ── 1. create an *empty* template network (same constructor you use) ─
+    let template = MyQmlp::<MyAutodiffBackend>::new(
+        &device,
+        BB_NUM_STATE_FEATURES,
+        BB_NUM_ACTIONS,
+    );
+
+    // ── 2. load weights from disk and get the INNER (no-grad) model ─────
+    let enemy = load_inference_model::<_, MyAutodiffBackend>(
+        template,
+        "./data/sarsa/TicTakToe/run20250511_193649/model_10000.mpk",   // point to any existing checkpoint
+        &device,
+    );
+
+    // ── 3. spin up an environment and play 100 half-moves via the helper ─
+    let mut env = Env::default();
+    env.set_against_random();        // red side will move randomly
+
+    for ply in 0..100 {
+        if env.is_game_over() {
+            println!("Game ended after {ply} plies with score {}", env.score());
+            break;
+        }
+
+        // agent (blue) chooses a *legal* action index…
+        let mask = env.action_mask();
+        let legal: Vec<_> = (0..BB_NUM_ACTIONS)
+            .filter(|&i| mask[i] == 1.0)
+            .collect();
+        if legal.is_empty() {
+            println!("No legal moves for the agent – terminating.");
+            break;
+        }
+        let action_idx = *legal.iter().choose(&mut thread_rng()).unwrap();
+
+        // …and we let `step_with_model` execute both sides of the turn
+        step_with_model::<
+            BB_NUM_STATE_FEATURES,
+            BB_NUM_ACTIONS,
+            _,
+            MyAutodiffBackend,
+            Env,
+        >(&mut env, &enemy, action_idx, &device);
+    }
+
+    println!("Final board:\n{}", env);
+    println!("Final score: {}", env.score());
+}

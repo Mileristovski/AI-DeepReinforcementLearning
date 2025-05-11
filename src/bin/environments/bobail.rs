@@ -1,7 +1,7 @@
 use crate::environments::env::DeepDiscreteActionsEnv;
 use rand::prelude::IteratorRandom;
 use std::fmt::Display;
-use rand::thread_rng;
+use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 
 pub const BB_NUM_STATE_FEATURES: usize = 300;
@@ -26,7 +26,7 @@ pub struct BobailHeuristic {
     pub chip_lookup: HashMap<usize, usize>,
     pub is_random_state: bool,
     against_random: bool,
-    actions_lookup: [usize; BB_NUM_ACTIONS],
+    actions_lookup: [usize; BB_NUM_ACTIONS]
 }
 
 impl BobailHeuristic {
@@ -64,7 +64,7 @@ impl BobailHeuristic {
             }
             actions
         };
-        
+
         Self {
             current_player: 1,
             previous_player: 1,
@@ -87,7 +87,7 @@ impl BobailHeuristic {
             ],
             empty: 0.0,
             chip_lookup,
-            is_random_state: false,
+            is_random_state: true,
             against_random: true,
             actions_lookup
         }
@@ -373,14 +373,27 @@ impl DeepDiscreteActionsEnv<BB_NUM_STATE_FEATURES, BB_NUM_ACTIONS> for BobailHeu
         ]);
         // Add the bobail
         board[NUM_BOARD_SIZE/2] = 11.0;
+
+        let mut rng = thread_rng();
+        let mut player = rng.gen_range(1..=2);
+        
+        if !self.is_random_state {
+            player = 1
+        };
         
         self.board = board;
-        
-        self.current_player = 1;
-        self.previous_player = 1;
+        self.current_player = player;
+        self.previous_player = player;
         self.is_game_over = false;
         self.score = 0.0;
         self.bobail_move = false;
+
+        if player == 2 && self.against_random {
+            if let Some(action) = self.available_actions()
+                .choose(&mut rng) {
+                self.step(action);
+            }
+        }
     }
 
     fn set_from_random_state(&mut self) { self.is_random_state = !self.is_random_state }
@@ -434,14 +447,10 @@ impl DeepDiscreteActionsEnv<BB_NUM_STATE_FEATURES, BB_NUM_ACTIONS> for BobailHeu
             new_lookup.insert(new_val as usize, m_idx);
         }
 
-        // 2. commit the new position
         self.board        = new_board;
         self.chip_lookup  = new_lookup;
         self.current_player = self.blue_player;
     }
-
-
-
 }
 
 impl Display for BobailHeuristic {

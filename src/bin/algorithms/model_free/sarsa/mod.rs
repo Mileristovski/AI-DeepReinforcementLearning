@@ -5,11 +5,12 @@ use burn::optim::{AdamConfig, GradientsParams, Optimizer};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use kdam::tqdm;
+use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
+use crate::config::{DeepLearningParams, Enemy, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
 use crate::services::algorithms::exports::model_free::sarsa::SarsaLogger;
-use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, test_trained_model};
+use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, step_with_model, test_trained_model};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
 
@@ -45,20 +46,35 @@ where
 
     let mut total_score = 0.0;
     let mut env = Env::default();
-    
-    for ep_id in tqdm!(0..=num_episodes) {
+    let mut model_versions: Vec<M> = Vec::new();
+    let mut playing_againts_model = false;
+    let mut enemy_model= model.valid().clone();
+
+    for ep_id in tqdm!(0..num_episodes) {
         let progress = ep_id as f32 / num_episodes as f32;
         let decayed_epsilon = (1.0 - progress) * start_epsilon + progress * final_epsilon;
 
         if ep_id % episode_stop == 0 {
             let mean = total_score / episode_stop as f32;
             logger.log(ep_id, mean);
-            if EXPORT_AT_EP.contains(&ep_id) {
-                logger.save_model(&model, ep_id);
+            if EXPORT_AT_EP.contains(&ep_id) && false {
+                model_versions.push(model.clone());
+                if model_versions.len() > 10 {
+                    model_versions.remove(0);
+                }
+                if !model_versions.is_empty() {
+                    let mut rng = rand::thread_rng();
+                    let non_frozen_enemy_model = model_versions.clone().into_iter().choose(&mut rng).unwrap().clone();
+                    enemy_model = non_frozen_enemy_model.valid().clone();
+                    playing_againts_model = true;
+                    env.set_against_random();
+                    env.set_from_random_state();
+                }
             }
             total_score = 0.0;
         }
         env.reset();
+
 
         if env.is_game_over() {
             continue;
@@ -84,7 +100,12 @@ where
 
         while !env.is_game_over() {
             let prev_score = env.score();
-            env.step_from_idx(a);
+            if playing_againts_model && false{
+                step_with_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Enemy<M, B>, B, Env>(
+                    &mut env, &enemy_model, a, device);
+            } else {
+                env.step_from_idx(a);
+            }
             let r = env.score() - prev_score;
 
             let s_p = env.state_description();
@@ -126,6 +147,7 @@ where
         }
         total_score += env.score();
     }
+    logger.save_model(&model, num_episodes);
     println!("Mean Score : {:.3}", total_score / episode_stop as f32);
     model
 }
@@ -135,7 +157,7 @@ pub fn run_episodic_semi_gradient_sarsa<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display
->()
+>(parameters: DeepLearningParams)
 {
     // Set the device for training
     let device: MyDevice = get_device();
@@ -150,8 +172,9 @@ pub fn run_episodic_semi_gradient_sarsa<
     let minus_one: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([-1.0; NUM_ACTIONS], &device);
     let plus_one: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([ 1.0; NUM_ACTIONS], &device);
     let fmin_vec: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
-    let parameters = DeepLearningParams::default();
-    let mut logger = SarsaLogger::new("./data/sarsa", &parameters);
+    // let parameters = DeepLearningParams::default();
+    
+    let mut logger = SarsaLogger::new("./data/sarsa/TicTakToe", &parameters);
     
     // Train the model
     let model =

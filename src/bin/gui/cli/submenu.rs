@@ -19,6 +19,7 @@ use crate::algorithms::model_based::monte_carlo::monte_carlo_random_rollout::run
 use crate::algorithms::model_free::reinforce::reinforce::run_reinforce;
 use crate::algorithms::model_free::reinforce::reinforce_baseline_learned_critic::run_reinforce_actor_critic;
 use crate::algorithms::model_free::reinforce::reinforce_mean_baseline::run_reinforce_baseline;
+use crate::config::DeepLearningParams;
 use crate::environments::env::DeepDiscreteActionsEnv;
 
 pub fn submenu<
@@ -86,9 +87,10 @@ pub fn submenu_drl<
         let selected_index = user_choice(options.clone(), &message);
         let mut stdout = io::stdout();
         reset_screen(&mut stdout, env_name);
+        let params: DeepLearningParams = DeepLearningParams::default();
 
         match selected_index {
-            0 => { run_episodic_semi_gradient_sarsa::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
+            0 => { run_episodic_semi_gradient_sarsa::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(params); },
             1 => { run_tabular_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(); },
             2 => { run_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
             3 => { run_double_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },

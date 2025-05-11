@@ -15,7 +15,6 @@ pub fn run_env_heuristic<
     if from_random {
         env.set_against_random();
     };
-
     let mut stdout = io::stdout();
     while !env.is_game_over() {
         reset_screen(&mut stdout, env_name);
@@ -31,6 +30,7 @@ pub fn run_env_heuristic<
         let input = input.trim();
         if input.eq_ignore_ascii_case("quit") {
             println!("Exiting...");
+            env.reset();
             break;
         }
 
@@ -38,7 +38,9 @@ pub fn run_env_heuristic<
             Ok(action) => {
                 if env.available_actions().collect::<Vec<_>>().contains(&action) {
                     env.step(action);
-                    env.switch_board();
+                    if from_random {
+                        env.switch_board();
+                    }
                 } else {
                     println!("Please enter a valid action");
                     let mut s = String::new();
@@ -63,10 +65,10 @@ pub fn run_benchmark_random_agents<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display
->(env: &mut Env, env_name: &str, from_random: bool) {
+>(env: &mut Env, env_name: &str, _from_random: bool) {
     let mut stdout = io::stdout();
     reset_screen(&mut stdout, env_name);
-
+    
     let mut time = 50;
     let mut input = String::new();
     println!("Enter the number of games to simulate:");
@@ -88,9 +90,11 @@ pub fn run_benchmark_random_agents<
     let mut games_played = 0;
     let mut rng = rand::thread_rng();
     let mut total_score = 0.0;
+    
     if !env.set_against_random() { env.set_against_random(); }
+    env.reset();
+    
     for _ in 0..num_games {
-        if from_random { env.set_from_random_state() };
 
         while !env.is_game_over() {
             let action_id = env.available_actions_ids().choose(&mut rng).unwrap();

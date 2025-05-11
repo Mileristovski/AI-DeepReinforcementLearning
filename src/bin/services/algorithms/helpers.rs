@@ -1,8 +1,10 @@
 use rand_distr::Distribution;
 use std::fmt::Display;
 use std::io;
+use std::path::{Path, PathBuf};
 use burn::module::AutodiffModule;
 use burn::prelude::*;
+use burn::record::{FullPrecisionSettings, NamedMpkFileRecorder};
 use rand::prelude::IteratorRandom;
 use rand::Rng;
 use crate::environments::env::DeepDiscreteActionsEnv;
@@ -10,6 +12,8 @@ use crate::config::{MyAutodiffBackend, MyBackend};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use burn::tensor::backend::AutodiffBackend;
 use burn::tensor::Tensor;
+use burn::module::Module;
+
 
 pub fn softmax<B: AutodiffBackend>(logits: Tensor<B, 1>) -> Tensor<B, 1> {
     let max_val = logits.clone().max();
@@ -97,7 +101,6 @@ where
 {
     let valid_model: MyQmlp<MyBackend> = model.valid();
     let mut env = Env::default();
-    env.set_against_random();
 
     // precompute a vector of -INF for masked-out policy
     let fmin_vec  = Tensor::<MyBackend, 1>::from_floats([f32::MIN; NUM_ACTIONS], device);
@@ -296,4 +299,60 @@ pub fn sample_distinct_weighted(
         set.insert(dist.sample(rng));
     }
     set.into_iter().collect()
+}
+
+pub fn step_with_model<
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    M,
+    B,
+    Env,
+>(
+    env:    &mut Env,
+    model:  &M,
+    action: usize,
+    device: &B::Device,
+)
+where
+    B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
+    M: Forward<B = B::InnerBackend>,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS>,
+{
+    env.step_from_idx(action);
+
+    if !env.is_game_over() {
+        env.switch_board();
+        let state = env.state_description();
+        let state_tensor = Tensor::<B::InnerBackend, 1>::from_floats(state.as_slice(), device);
+
+        let mask = env.action_mask();
+        let mask_tensor = Tensor::<B::InnerBackend, 1>::from_floats(mask.as_slice(), device);
+        let output = model.forward(state_tensor);
+
+        let masked_output = output * mask_tensor.clone() +
+            (mask_tensor.mul_scalar(-1.0).add_scalar(1.0)) *
+                Tensor::<B::InnerBackend, 1>::from_floats([f32::MIN; NUM_ACTIONS], device);
+
+        let model_action = masked_output.argmax(0).into_scalar() as usize;
+        env.step_from_idx(model_action);
+        env.switch_board();
+    }
+}
+
+pub fn load_inference_model<M, B>(
+    model: M,                 // an *empty* instance of the net
+    file_path: impl AsRef<Path>,  // e.g. "model_42.mpk"
+    device: &B::Device,
+) -> <M as AutodiffModule<B>>::InnerModule
+where
+    M: Module<B> + AutodiffModule<B>,
+    B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
+{
+    let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
+    let loaded = model
+        .load_file(file_path.as_ref(), &recorder, device)
+        .expect("failed to load checkpoint");
+
+    // drop the AD graph → inner backend, ready for inference
+    loaded.valid().clone()
 }
