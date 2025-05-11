@@ -3,14 +3,13 @@ use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, step_with_model, test_trained_model};
-use crate::config::{DeepLearningParams, Enemy, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
+use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, test_trained_model};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
 use rand::distributions::{Distribution, WeightedIndex};
-use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
 use crate::services::algorithms::exports::model_free::reinforce::reinforce::ReinforceLogger;
 
@@ -39,11 +38,7 @@ where
     let mut opt  = AdamConfig::new().init();
     let mut rng  = Xoshiro256PlusPlus::from_entropy();
     let mut total = 0.0f32;
-    let mut model_versions: Vec<M> = Vec::new();
-    let mut playing_againts_model = false;
-    let mut enemy_model= model.valid().clone();
-
-
+    
     // “minus ∞” used for masking illegal actions
     let neg_inf = Tensor::<B,1>::from_floats([-1e9; N_A], device);
 
@@ -53,23 +48,8 @@ where
         if ep % log_every == 0 {
             let mean = total / log_every as f32;
             logger.log(ep, mean / log_every as f32);
-            if EXPORT_AT_EP.contains(&ep) {
-                model_versions.push(model.clone());
-                if model_versions.len() > 10 {
-                    model_versions.remove(0);
-                }
-                if !model_versions.is_empty() {
-                    let mut rng = rand::thread_rng();
-                    let non_frozen_enemy_model = model_versions.clone().into_iter().choose(&mut rng).unwrap().clone();
-                    enemy_model = non_frozen_enemy_model.valid().clone();
-                    playing_againts_model = true;
-                    env.set_against_random();
-                    env.set_from_random_state();
-                }
-            }
             total = 0.0;
         }
-
 
         // store (state, mask, action, reward)
         let mut traj: Vec<([f32; N_S], [f32; N_A], usize, f32)> = Vec::new();
@@ -77,10 +57,10 @@ where
 
         //------------------ roll-out ------------------------------------
         while !env.is_game_over() {
-            let logits = model.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
+            let logits = model.forward(Tensor::<B, 1>::from_floats(s.as_slice(), device));
 
-            let mask   = env.action_mask();
-            let mask_t = Tensor::<B,1>::from(mask).to_device(device);
+            let mask = env.action_mask();
+            let mask_t = Tensor::<B, 1>::from(mask).to_device(device);
 
             // masked soft-max
             let adj = logits.clone() * mask_t.clone()
@@ -89,17 +69,12 @@ where
 
             // safe sampling (skip the step if all probs are ~0)
             let p_vec = probs.clone().into_data().into_vec::<f32>().unwrap();
-            let dist  = WeightedIndex::new(&p_vec)
+            let dist = WeightedIndex::new(&p_vec)
                 .unwrap_or_else(|_| WeightedIndex::new(&[1.0; N_A]).unwrap());
             let a = dist.sample(&mut rng);
 
             let prev = env.score();
-            if playing_againts_model {
-                step_with_model::<N_S, N_A, Enemy<M, B>, B, Env>(
-                    &mut env, &enemy_model, a, device);
-            } else {
-                env.step_from_idx(a);
-            }
+            env.step_from_idx(a);
             let r = env.score() - prev;
 
             traj.push((s, mask, a, r));
@@ -109,28 +84,29 @@ where
         //---------------- Monte-Carlo returns ---------------------------
         let mut g = 0.0f32;
         let mut returns = vec![0.0; traj.len()];
-        for (idx, &(_,_,_,r)) in traj.iter().rev().enumerate() {
+        for (idx, &(_, _, _, r)) in traj.iter().rev().enumerate() {
             g = r + gamma * g;
             returns[traj.len() - 1 - idx] = g;
         }
 
         //---------------- REINFORCE update ------------------------------
         for ((state, mask, action, _), g_t) in traj.into_iter().zip(returns.into_iter()) {
-            let logits = model.forward(Tensor::<B,1>::from_floats(state.as_slice(), device));
+            let logits = model.forward(Tensor::<B, 1>::from_floats(state.as_slice(), device));
 
-            let mask_t = Tensor::<B,1>::from(mask).to_device(device);
-            let adj    = logits.clone() * mask_t.clone()
+            let mask_t = Tensor::<B, 1>::from(mask).to_device(device);
+            let adj = logits.clone() * mask_t.clone()
                 + neg_inf.clone() * (mask_t.neg().add_scalar(1.0));
-            let logp   = log_softmax(adj).slice([action .. action+1]);
+            let logp = log_softmax(adj).slice([action..action + 1]);
 
-            let loss   = logp.mul_scalar(-g_t);          // maximise return
-            let grads  = GradientsParams::from_grads(loss.backward(), &model);
-            model      = opt.step(lr.into(), model, grads);
+            let loss = logp.mul_scalar(-g_t);          // maximise return
+            let grads = GradientsParams::from_grads(loss.backward(), &model);
+            model = opt.step(lr.into(), model, grads);
         }
 
         total += env.score();
     }
-
+    
+    logger.save_model(&model, num_episodes);
     println!("Mean Score : {:.3}", total / log_every as f32);
     model
 }

@@ -5,12 +5,11 @@ use burn::optim::{AdamConfig, GradientsParams, Optimizer};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use kdam::tqdm;
-use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::config::{DeepLearningParams, Enemy, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
+use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::exports::model_free::sarsa::SarsaLogger;
-use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, step_with_model, test_trained_model};
+use crate::services::algorithms::helpers::{epsilon_greedy_action, get_device, test_trained_model};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
 
@@ -46,10 +45,7 @@ where
 
     let mut total_score = 0.0;
     let mut env = Env::default();
-    let mut model_versions: Vec<M> = Vec::new();
-    let mut playing_againts_model = false;
-    let mut enemy_model= model.valid().clone();
-
+    
     for ep_id in tqdm!(0..num_episodes) {
         let progress = ep_id as f32 / num_episodes as f32;
         let decayed_epsilon = (1.0 - progress) * start_epsilon + progress * final_epsilon;
@@ -57,20 +53,6 @@ where
         if ep_id % episode_stop == 0 {
             let mean = total_score / episode_stop as f32;
             logger.log(ep_id, mean);
-            if EXPORT_AT_EP.contains(&ep_id) {
-                model_versions.push(model.clone());
-                if model_versions.len() > 10 {
-                    model_versions.remove(0);
-                }
-                if !model_versions.is_empty() {
-                    let mut rng = rand::thread_rng();
-                    let non_frozen_enemy_model = model_versions.clone().into_iter().choose(&mut rng).unwrap().clone();
-                    enemy_model = non_frozen_enemy_model.valid().clone();
-                    playing_againts_model = true;
-                    env.set_against_random();
-                    env.set_from_random_state();
-                }
-            }
             total_score = 0.0;
         }
         env.reset();
@@ -100,12 +82,7 @@ where
 
         while !env.is_game_over() {
             let prev_score = env.score();
-            if playing_againts_model {
-                step_with_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Enemy<M, B>, B, Env>(
-                    &mut env, &enemy_model, a, device);
-            } else {
-                env.step_from_idx(a);
-            }
+            env.step_from_idx(a);
             let r = env.score() - prev_score;
 
             let s_p = env.state_description();
