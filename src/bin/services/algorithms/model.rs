@@ -14,7 +14,7 @@ pub struct MyQmlp<B: Backend> {
 }
 
 impl<B: Backend> MyQmlp<B> {
-    pub(crate) fn new(device: &B::Device, in_features: usize, out_actions: usize) -> Self {
+    pub fn new(device: &B::Device, in_features: usize, out_actions: usize) -> Self {
         let mut layers = Vec::new();
         let mut input_size = in_features;
 
