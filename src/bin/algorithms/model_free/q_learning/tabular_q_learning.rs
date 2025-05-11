@@ -23,7 +23,6 @@ pub fn episodic_tabular_q_learning<
     let mut q_table = [[0.0f32; NUM_ACTIONS]; NUM_STATES];
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut env = Env::default();
-    env.set_against_random();
     
     let mut total = 0.0;
 

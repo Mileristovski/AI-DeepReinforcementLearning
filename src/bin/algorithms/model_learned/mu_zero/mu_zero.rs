@@ -11,7 +11,7 @@ use std::fmt::Display;
 use crate::config::{DeepLearningParams, MyAutodiffBackend, EXPORT_AT_EP};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::services::algorithms::exports::model_learned::mu_zero::mu_zero::MuZeroLogger;
-use crate::services::algorithms::helpers::{log_softmax, run_mcts_pi, get_device, test_trained_model};
+use crate::services::algorithms::helpers::{run_mcts_pi, get_device, test_trained_model, masked_log_softmax};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
 // ─────────────────────────────────────────────────────────────
@@ -81,15 +81,14 @@ where
         // ── Self‑play block ────────────────────────────────────────────
         for _ in 0..games_per_iter {
             let mut env   = Env::default();
-            env.set_against_random();
-            env.reset();
 
             let mut traj = Vec::new();
             while !env.is_game_over() {
                 let history = env.state_description();
 
                 let pi_root: [f32; A] = run_mcts_pi::<HS, A, Env, _>(&env, mcts_sims, c, &mut rng);
-                let dist = WeightedIndex::new(&pi_root).expect("π not a prob‑vector");
+                let dist = WeightedIndex::new(&pi_root).expect("pi not a prob‑vector");
+
                 let a    = dist.sample(&mut rng);
 
                 traj.push((history, pi_root));
@@ -126,8 +125,12 @@ where
                 let r_pred    = out.slice([A + 1..A + 2]);
 
                 let pi_t  = Tensor::<B, 1>::from(pi_target).to_device(device);
-                let logp  = log_softmax(pi_logits);
-                let loss_p = -(pi_t * logp).sum();
+                let mask_vec : Vec<f32> = pi_target          // >0 exactly on legal moves
+                    .iter().map(|&p| if p > 0.0 { 1.0 } else { 0.0 }).collect();
+                let mask_t   = Tensor::<B,1>::from(mask_vec.as_slice()).to_device(device);
+
+                let logp     = masked_log_softmax(pi_logits, mask_t.clone());
+                let loss_p   = -(pi_t * logp).sum();
 
                 let z_t   = Tensor::<B, 1>::from_floats([z], device);
                 let loss_v = (v_pred - z_t.clone()).powf_scalar(2.0);
@@ -164,7 +167,7 @@ pub fn run_mu_zero<
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, N_S, N_A + 2);
 
     let p = DeepLearningParams::default();
-    let mut logger = MuZeroLogger::new("./base/mu_zero", &p);
+    let mut logger = MuZeroLogger::new("./data/mu_zero", &p);
     let trained = episodic_mu_zero::<N_S, N_A, _, _, Env>(
         model,
         p.num_episodes,

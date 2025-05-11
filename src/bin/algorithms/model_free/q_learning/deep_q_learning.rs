@@ -59,7 +59,7 @@ where
         let frac = ep as f32 / num_episodes as f32;
         let eps  = (1. - frac) * eps_start + frac * eps_final;
 
-        let mut env = Env::default(); env.set_against_random(); env.reset();
+        let mut env = Env::default(); 
         let mut s = env.state_description();
 
         while !env.is_game_over() {

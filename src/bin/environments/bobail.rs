@@ -88,7 +88,7 @@ impl BobailHeuristic {
             empty: 0.0,
             chip_lookup,
             is_random_state: false,
-            against_random: false,
+            against_random: true,
             actions_lookup
         }
     }
@@ -127,7 +127,6 @@ impl BobailHeuristic {
 
     fn move_piece(&mut self, action: usize) -> (usize, usize) {
         let (chip_id, row, col, dir) = self.decode_action(action);
-
         let (dr, dc, _) = self
             .directions
             .iter()
@@ -163,7 +162,6 @@ impl BobailHeuristic {
                 new_col = next_col;
             }
         }
-
         let dst_index = new_row as usize * COLS + new_col as usize;
         let src_index = row * COLS + col;
 
@@ -210,14 +208,7 @@ impl DeepDiscreteActionsEnv<BB_NUM_STATE_FEATURES, BB_NUM_ACTIONS> for BobailHeu
         let mut action_ids = Vec::new();
 
         // Chip ID order must match the mask layout
-        let controlled_chip_ids: Vec<usize> = if self.bobail_move {
-            vec![11]
-        } else {
-            match self.current_player {
-                1 => vec![1, 2, 3, 4, 5],       // Blue player
-                _ => vec![]
-            }
-        };
+        let controlled_chip_ids: Vec<usize> = vec![11, 1, 2, 3, 4, 5];
 
         for (chip_index, &chip_id) in controlled_chip_ids.iter().enumerate() {
             if let Some(&index) = self.chip_lookup.get(&chip_id) {
@@ -272,33 +263,32 @@ impl DeepDiscreteActionsEnv<BB_NUM_STATE_FEATURES, BB_NUM_ACTIONS> for BobailHeu
 
         available_actions.into_iter()
     }
-    
+
 
     fn action_mask(&self) -> [f32; BB_NUM_ACTIONS] {
         let mut mask = [0.0; BB_NUM_ACTIONS];
 
-        // Only generate when it's Blue's turn
-        if self.current_player != self.blue_player {
-            return mask;
-        }
+        // chips the agent can touch this turn
+        let controlled: &[usize] = if self.bobail_move {
+            &[11]                  // Bobail only
+        } else if self.current_player == self.blue_player {
+            &[1, 2, 3, 4, 5]       // Blue pieces
+        } else {
+            return mask;           // Red’s turn → agent does nothing
+        };
 
-        // Index 0 is bobail, 1-5 are blue chips
-        let agent_chip_ids = [11, 1, 2, 3, 4, 5];
+        const CHIP_ORDER: [usize; 6] = [11, 1, 2, 3, 4, 5];
 
-        for (i, &chip_id) in agent_chip_ids.iter().enumerate() {
-            if let Some(&index) = self.chip_lookup.get(&chip_id) {
-                if (self.bobail_move && [11].contains(&chip_id)) || (!self.bobail_move && [1, 2, 3, 4, 5].contains(&chip_id)) {
-                    let row = index / COLS;
-                    let col = index % COLS;
-
-                    for dir in self.get_possible_moves(row, col) {
-                        let mask_index = i * 8 + dir;
-                        mask[mask_index] = 1.0;
-                    }
+        for &chip in controlled {
+            if let Some(&idx) = self.chip_lookup.get(&chip) {
+                let row = idx / COLS;
+                let col = idx % COLS;
+                for dir in self.get_possible_moves(row, col) {
+                    let slot = CHIP_ORDER.iter().position(|&id| id == chip).unwrap();
+                    mask[slot * 8 + dir] = 1.0;
                 }
             }
         }
-
         mask
     }
 
@@ -306,6 +296,7 @@ impl DeepDiscreteActionsEnv<BB_NUM_STATE_FEATURES, BB_NUM_ACTIONS> for BobailHeu
         if self.is_game_over {
             panic!("Trying to play while Game is Over");
         }
+        
         // Move the piece
         Self::move_piece(self, action);
 
@@ -321,7 +312,7 @@ impl DeepDiscreteActionsEnv<BB_NUM_STATE_FEATURES, BB_NUM_ACTIONS> for BobailHeu
         let no_actions_left = self.available_actions().next().is_none();
 
         // Check if game is over
-        if bobail_in_terminal || no_actions_left {
+        if (bobail_in_terminal || no_actions_left) && !self.is_game_over {
             self.is_game_over = true;
 
             // Assign winner and score
@@ -400,11 +391,10 @@ impl DeepDiscreteActionsEnv<BB_NUM_STATE_FEATURES, BB_NUM_ACTIONS> for BobailHeu
     }
 
     fn step_from_idx(&mut self, action_idx: usize) {
-        if action_idx >= BB_NUM_ACTIONS {
-            eprintln!("Invalid action index: {}", action_idx);
+        if action_idx > BB_NUM_ACTIONS-1 {
+            // println!("Invalid action index: {}", action_idx);
             return;
         }
-
         let action = self.actions_lookup[action_idx];
         self.step(action);
     }

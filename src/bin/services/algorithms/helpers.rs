@@ -140,114 +140,136 @@ pub fn split_policy_value<B: Backend, const A: usize>(
     (policy_logits, value_v)
 }
 
-struct Node<const A: usize> {
-    visits: usize,
-    value: f32,
-    children: [Option<usize>; A],
-    untried: Vec<usize>,
+struct Edge {
+    action: usize,
+    child : usize,
 }
 
-impl<const A: usize> Node<A> {
-    fn new(avail: impl Iterator<Item = usize>) -> Self {
-        let untried = avail.collect::<Vec<_>>();
+struct Node<const S: usize, const A: usize> {
+    visits: usize,
+    value: f32,
+    children: [Option<Edge>; A],
+    tried: Vec<usize>,  // Keep track of actions we've already tried
+}
+
+impl<const S: usize, const A: usize> Node<S, A> {
+    fn new() -> Self {
         Node {
             visits: 0,
             value: 0.0,
             children: [(); A].map(|_| None),
-            untried,
+            tried: Vec::new(),
+        }
+    }
+
+    // Get untried actions from current legal moves
+    fn get_untried_action(&mut self, env: &impl DeepDiscreteActionsEnv<S, A>) -> Option<usize> {
+        let legal_moves: Vec<_> = env.available_actions_ids()
+            .filter(|&action| !self.tried.contains(&action))
+            .collect();
+
+        if let Some(&action) = legal_moves.first() {
+            self.tried.push(action);
+            Some(action)
+        } else {
+            None
         }
     }
 }
 
-pub fn run_mcts_pi<
-    const S: usize,
-    const A: usize,
-    Env: DeepDiscreteActionsEnv<S, A> + Display + Default + Clone,
-    R: Rng + ?Sized,
->(
+
+pub fn run_mcts_pi<const S: usize, const A: usize, Env, R>(
     root_env: &Env,
     num_sims: usize,
     c: f32,
     rng: &mut R,
-) -> [f32; A] {
-    // tree and corresponding env states
-    let mut tree: Vec<Node<A>> = Vec::new();
-    let mut states: Vec<Env> = Vec::new();
-
-    // create root
-    tree.push(Node::new(root_env.available_actions_ids()));
-    states.push(root_env.clone());
-    let root_id = 0;
+) -> [f32; A]
+where
+    Env: DeepDiscreteActionsEnv<S, A> + Display + Default + Clone,
+    R: Rng + ?Sized,
+{
+    let mut tree = Vec::new();
+    tree.push(Node::new());  // Create root node
 
     for _ in 0..num_sims {
-        let mut node = root_id;
+        let mut node = 0;
         let mut env = root_env.clone();
         let mut path = vec![node];
 
-        while tree[node].untried.is_empty() && !env.is_game_over() {
-            let parent_n = tree[node].visits as f32;
-            let (a, &child_opt) = tree[node]
-                .children
-                .iter()
-                .enumerate()
-                .filter(|&(_, &opt)| opt.is_some())
-                .max_by(|&(a1, _), &(a2, _)| {
-                    let c1 = tree[node].children[a1].unwrap();
-                    let c2 = tree[node].children[a2].unwrap();
-                    let q1 = tree[c1].value / tree[c1].visits as f32;
-                    let q2 = tree[c2].value / tree[c2].visits as f32;
-                    let u1 = q1 + c * (parent_n.ln() / tree[c1].visits as f32).sqrt();
-                    let u2 = q2 + c * (parent_n.ln() / tree[c2].visits as f32).sqrt();
-                    u1.partial_cmp(&u2).unwrap()
-                })
-                .unwrap();
-            let child = child_opt.unwrap();
-            env.step_from_idx(a);
-            node = child;
-            path.push(node);
+        // Selection
+        while !env.is_game_over() {
+            if let Some(action) = tree[node].get_untried_action(&env) {
+                // Expansion
+                env.step_from_idx(action);
+                let new_id = tree.len();
+                tree.push(Node::new());
+                tree[node].children[action] = Some(Edge { action, child: new_id });
+                node = new_id;
+                path.push(node);
+                break;
+            } else {
+                // Continue selection
+                let parent_n = tree[node].visits as f32;
+                let current_legal_moves: Vec<_> = env.available_actions_ids().collect();
+
+                let (_best_edge_idx, best_edge) = tree[node].children
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(a, e)| e.as_ref().map(|edge| (a, edge)))
+                    // Only consider edges that correspond to currently legal moves
+                    .filter(|(_, edge)| current_legal_moves.contains(&edge.action))
+                    .max_by(|&(_, e1), &(_, e2)| {
+                        let q1 = tree[e1.child].value / tree[e1.child].visits as f32;
+                        let q2 = tree[e2.child].value / tree[e2.child].visits as f32;
+                        let u1 = q1 + c * (parent_n.ln() / tree[e1.child].visits as f32).sqrt();
+                        let u2 = q2 + c * (parent_n.ln() / tree[e2.child].visits as f32).sqrt();
+                        u1.partial_cmp(&u2).unwrap()
+                    })
+                    .ok_or("No legal moves").unwrap();
+
+                env.step_from_idx(best_edge.action);
+                node = best_edge.child;
+                path.push(node);
+            }
         }
 
-        if !env.is_game_over() {
-            let a_mcts = tree[node].untried.pop().unwrap();
-            env.step_from_idx(a_mcts);
-            let new_id = tree.len();
-            tree.push(Node::new(env.available_actions_ids()));
-            states.push(env.clone());
-            tree[node].children[a_mcts] = Some(new_id);
-            node = new_id;
-            path.push(node);
-        }
-
+        // Simulation
         let mut rollout = env.clone();
         while !rollout.is_game_over() {
-            let a = rollout.available_actions_ids().choose(rng).unwrap();
-            rollout.step_from_idx(a);
+            if let Some(a) = rollout.available_actions_ids().choose(rng) {
+                rollout.step_from_idx(a);
+            } else {
+                break;
+            }
         }
         let reward = rollout.score();
 
+        // Backpropagation
         for &n in &path {
             tree[n].visits += 1;
             tree[n].value += reward;
         }
     }
 
+    // Calculate policy from visit counts
     let mut pi = [0.0f32; A];
-    let root = &tree[root_id];
-    let total_visits: usize = root
-        .children
+    let root = &tree[0];
+    let total_visits: usize = root.children
         .iter()
-        .filter_map(|&c| c)
-        .map(|ci| tree[ci].visits)
+        .filter_map(|edge_opt| edge_opt.as_ref().map(|e| e.child))
+        .map(|cid| tree[cid].visits)
         .sum();
+
     if total_visits > 0 {
-        for (a, &child_opt) in root.children.iter().enumerate() {
-            if let Some(ci) = child_opt {
-                pi[a] = (tree[ci].visits as f32) / (total_visits as f32);
+        for (a, edge_opt) in root.children.iter().enumerate() {
+            if let Some(edge) = edge_opt {
+                pi[a] = tree[edge.child].visits as f32 / total_visits as f32;
             }
         }
     }
     pi
 }
+
 
 pub fn greedy_policy_action<B: Backend<FloatElem = f32, IntElem = i64>>(
     policy_logits:  &Tensor<B, 1>,

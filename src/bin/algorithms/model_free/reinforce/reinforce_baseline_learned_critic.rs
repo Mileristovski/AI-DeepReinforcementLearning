@@ -58,8 +58,6 @@ where
 
         // collect one episode
         let mut env = Env::default();
-        env.set_against_random();
-        env.reset();
 
         let mut trajectory: Vec<([f32; NUM_STATE_FEATURES], usize, f32)> = Vec::new();
         let mut s = env.state_description();

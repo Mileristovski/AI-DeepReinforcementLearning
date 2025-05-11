@@ -61,8 +61,6 @@ where
         let eps  = (1.0 - frac) * start_epsilon + frac * final_epsilon;
 
         let mut env = Env::default();
-        env.set_against_random();
-        env.reset();
         let mut s = env.state_description();
 
         while !env.is_game_over() {

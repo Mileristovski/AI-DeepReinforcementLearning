@@ -79,8 +79,8 @@ pub struct DeepLearningParams {
 impl Default for DeepLearningParams {
     fn default() -> Self {
         Self {
-            num_episodes: 100,
-            episode_stop: 10,
+            num_episodes: 1000,
+            episode_stop: 100,
             start_epsilon: 1.0,
             final_epsilon: 1e-5,
             

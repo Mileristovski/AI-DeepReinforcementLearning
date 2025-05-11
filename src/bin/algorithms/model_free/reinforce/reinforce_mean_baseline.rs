@@ -57,8 +57,6 @@ where
         }
 
         let mut env = Env::default();
-        env.set_against_random();
-        env.reset();
 
         // (state, mask, action, reward) per time‑step ----------------------
         let mut traj: Vec<([f32; N_S], [f32; N_A], usize, f32)> = Vec::new();

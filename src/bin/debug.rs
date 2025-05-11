@@ -6,8 +6,6 @@ mod gui;
 
 use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::environments::bobail::BobailHeuristic;
-use std::time::Duration;
-use std::thread::sleep;
 use rand::prelude::IteratorRandom;
 
 type GameEnv = BobailHeuristic;
@@ -81,11 +79,23 @@ fn display_properties(env: &mut GameEnv) {
 fn main() {
     let mut env = GameEnv::default();
     env.reset();
+    // env.set_against_random();
 
     println!("\n=== Initial State ===");
     display_properties(&mut env);
 
-    for i in 0..20 {
+    let mut env = BobailHeuristic::default();
+    for _ in 0..10_000 {
+        let mask = env.action_mask();
+        let legal: Vec<_> = (0..48).filter(|&i| mask[i] == 1.0).collect();
+        if legal.is_empty() { break; }
+        let a = *legal.iter().choose(&mut rand::thread_rng()).unwrap();
+        env.step_from_idx(a);          // should never panic
+    }
+    println!("Random play survived without panics ✅");
+}
+/*
+    for i in 0..10 {
         if env.is_game_over() {
             println!("\nGame over reached early at step {}", i);
             break;
@@ -107,7 +117,7 @@ fn main() {
     println!("\n=== Final State ===");
     println!("{}", env);
 }
-
+*/
 // fn main() {
     // let mut env = GameEnv::default();
     // // env.is_random_state = true;

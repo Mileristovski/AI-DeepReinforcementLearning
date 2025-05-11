@@ -24,7 +24,7 @@ impl Default for TicTacToeVersusRandom {
             score: 0.0,
             is_game_over: false,
             is_random_state: false,
-            against_random: false
+            against_random: true
         }
     }
 }

@@ -74,50 +74,66 @@ pub fn run_mcts_policy<
         let mut env     = root_env.clone();
         let mut path    = vec![0];
 
+        // 1) Selection
         while tree[node_id].untried.is_empty() && !env.is_game_over() {
             let parent_n = tree[node_id].visits as f32;
             let mut best_score = f32::NEG_INFINITY;
-            let mut best_a     = 0;
+            let mut best_a = usize::MAX;
+
+            // Get current legal moves
+            let current_legal_moves: Vec<_> = env.available_actions_ids().collect();
 
             for a in 0..A {
                 if let Some(child_id) = tree[node_id].children[a] {
-                    let child    = &tree[child_id];
-                    let q        = child.value / child.visits as f32; // mean value
-                    let u        = q
-                        + c * (parent_n.ln() / (child.visits as f32 + 1e-8)).sqrt();
-                    if u > best_score {
-                        best_score = u;
-                        best_a     = a;
+                    // Only consider moves that are currently legal
+                    if current_legal_moves.contains(&a) {
+                        let child = &tree[child_id];
+                        let q = child.value / child.visits as f32; // mean value
+                        let u = q + c * (parent_n.ln() / (child.visits as f32 + 1e-8)).sqrt();
+                        if u > best_score {
+                            best_score = u;
+                            best_a = a;
+                        }
                     }
                 }
             }
 
-            // descend
-            if let Some(child_id) = tree[node_id].children[best_a] {
-                env.step_from_idx(best_a);
-                node_id = child_id;
-                path.push(node_id);
-            } else {
-                break; // no legal child (should not happen)
+            // If we never found a legal child, break out to expansion
+            if best_a == usize::MAX {
+                break;
             }
+            env.step_from_idx(best_a);
+            node_id = tree[node_id].children[best_a].unwrap();
+            path.push(node_id);
         }
 
         // 2) Expansion
         if !env.is_game_over() && !tree[node_id].untried.is_empty() {
-            let a = tree[node_id].untried.pop().unwrap();
-            env.step_from_idx(a);
-            let new_id = tree.len();
-            tree.push(Node::new(env.available_actions_ids()));
-            states.push(env.clone());
-            tree[node_id].children[a] = Some(new_id);
-            node_id = new_id;
-            path.push(node_id);
+            // Get current legal moves
+            let current_legal_moves: Vec<_> = env.available_actions_ids().collect();
+            
+            // Keep trying untried actions until we find a legal one
+            while let Some(a) = tree[node_id].untried.pop() {
+                if current_legal_moves.contains(&a) {
+                    env.step_from_idx(a);
+                    let new_id = tree.len();
+                    tree.push(Node::new(env.available_actions_ids()));
+                    states.push(env.clone());
+                    tree[node_id].children[a] = Some(new_id);
+                    node_id = new_id;
+                    path.push(node_id);
+                    break;
+                }
+                // if action is not legal, continue popping until we find a legal one
+            }
         }
 
         // 3) Simulation (random roll-out)
         let mut rollout = env.clone();
         while !rollout.is_game_over() {
-            let a = rollout.available_actions_ids().choose(rng).unwrap();
+            let legal: Vec<_> = rollout.available_actions_ids().collect();
+            if legal.is_empty() { break; }
+            let &a = legal.iter().choose(rng).unwrap();
             rollout.step_from_idx(a);
         }
         let reward = rollout.score();
@@ -199,8 +215,6 @@ where
         let mut training_data = Vec::new();
         for _ in 0..games_per_iteration {
             let mut env = Env::default();
-            env.set_against_random();
-            env.reset();
 
             let mut trajectory = Vec::new();
             while !env.is_game_over() {

@@ -11,7 +11,7 @@ use rand::distributions::Distribution;
 
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
 use crate::environments::env::DeepDiscreteActionsEnv;
-use crate::services::algorithms::helpers::{get_device, log_softmax, split_policy_value, test_trained_model};
+use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, split_policy_value, test_trained_model};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use std::fmt::Display;
 use crate::services::algorithms::exports::model_based::alpha_zero::alpha_zero_ea::AlphaZeroExpertLogger;
@@ -44,6 +44,7 @@ fn run_mcts_pi<
     c: f32,
     rng: &mut R,
 ) -> [f32; A] {
+    // ---------- node type -------------------------------------------------
     #[derive(Clone)]
     struct Node<const A: usize> {
         visits:   usize,
@@ -53,19 +54,25 @@ fn run_mcts_pi<
     }
     impl<const A: usize> Node<A> {
         fn new(avail: impl Iterator<Item = usize>) -> Self {
-            Self { visits: 0, value: 0.0,
+            Self {
+                visits:   0,
+                value:    0.0,
                 children: [(); A].map(|_| None),
-                untried: avail.collect() }
+                untried:  avail.collect(),
+            }
         }
     }
 
+    // ---------- tree storage ---------------------------------------------
     let mut tree:   Vec<Node<A>> = Vec::new();
     let mut states: Vec<Env>     = Vec::new();
+
     tree.push(Node::new(root_env.available_actions_ids()));
     states.push(root_env.clone());
 
+    // ---------- simulations ----------------------------------------------
     for _ in 0..num_sim {
-        //---------------- Selection ----------------
+        // 1) Selection -----------------------------------------------------
         let mut node = 0usize;
         let mut env  = root_env.clone();
         let mut path = vec![0];
@@ -74,61 +81,82 @@ fn run_mcts_pi<
             let parent_n = tree[node].visits as f32;
             let mut best_a = usize::MAX;
             let mut best_u = f32::NEG_INFINITY;
+            
+            // Get current legal moves
+            let current_legal_moves: Vec<_> = env.available_actions_ids().collect();
 
             for a in 0..A {
+                // Only consider legal moves that have children
                 if let Some(child) = tree[node].children[a] {
-                    let q = tree[child].value / tree[child].visits as f32;
-                    let u = q + c * (parent_n.ln() / tree[child].visits as f32).sqrt();
-                    if u > best_u {
-                        best_u = u;
-                        best_a = a;
+                    if current_legal_moves.contains(&a) {
+                        let q = tree[child].value / tree[child].visits as f32;
+                        let u = q + c * (parent_n.ln() / tree[child].visits as f32).sqrt();
+                        if u > best_u {
+                            best_u = u;
+                            best_a = a;
+                        }
                     }
                 }
             }
 
-            // ─── no recorded children → break to expansion ───
+            // If we never found a legal child, break out to expansion
             if best_a == usize::MAX {
                 break;
             }
-            env.step_from_idx(best_a);                      // always legal now
+            env.step_from_idx(best_a);
             node = tree[node].children[best_a].unwrap();
             path.push(node);
         }
 
-        //---------------- Expansion -----------------
+        // 2) Expansion -----------------------------------------------------
         if !env.is_game_over() && !tree[node].untried.is_empty() {
-            let a = tree[node].untried.pop().unwrap();
-            env.step_from_idx(a);
-            let new_id = tree.len();
-            tree.push(Node::new(env.available_actions_ids()));
-            states.push(env.clone());
-            tree[node].children[a] = Some(new_id);
-            node = new_id;
-            path.push(node);
+            let current_legal_moves: Vec<_> = env.available_actions_ids().collect();
+            
+            // Keep trying untried actions until we find a legal one
+            while let Some(a) = tree[node].untried.pop() {
+                if current_legal_moves.contains(&a) {
+                    env.step_from_idx(a);
+                    let new_id = tree.len();
+                    tree.push(Node::new(env.available_actions_ids()));
+                    states.push(env.clone());
+                    tree[node].children[a] = Some(new_id);
+                    node = new_id;
+                    path.push(node);
+                    break;
+                }
+                // if action is not legal, continue popping until we find a legal one
+            }
         }
 
-        //---------------- Roll-out ------------------
+        // 3) Roll-out (random policy) -------------------------------------
         let mut rollout = env.clone();
         while !rollout.is_game_over() {
-            let a = rollout.available_actions_ids().choose(rng).unwrap();
-            rollout.step_from_idx(a);
+            if let Some(a) = rollout.available_actions_ids().choose(rng) {
+                rollout.step_from_idx(a);
+            } else {
+                break; // no legal actions – shouldn’t happen
+            }
         }
         let reward = rollout.score();
 
-        //---------------- Back-prop ------------------
+        // 4) Back-propagation ---------------------------------------------
         for &nid in &path {
             tree[nid].visits += 1;
             tree[nid].value  += reward;
         }
     }
 
-    // visits → π
+    // ---------- visits → π -----------------------------------------------
     let mut pi = [0.0f32; A];
     let root = &tree[0];
-    let total: usize = root.children.iter().filter_map(|&c| c.map(|id| tree[id].visits)).sum();
+    let total: usize = root.children
+        .iter()
+        .filter_map(|&c| c.map(|id| tree[id].visits))
+        .sum();
 
     if total == 0 {
-        for p in &mut pi { *p = 1.0 / A as f32; }
+        // fallback uniform
+        for p in &mut pi { *p = 1.0 / A as f32 }
     } else {
         for a in 0..A {
             if let Some(cid) = root.children[a] {
@@ -174,13 +202,11 @@ where
             }
             total_score = 0.0;
         }
-        
+
         let mut training: Vec<([f32; NUM_STATE_FEATURES], [f32; NUM_ACTIONS], f32)> = Vec::new();
 
         for _ in 0..games_per_iteration {
             let mut env = Env::default();
-            env.set_against_random();
-            env.reset();
 
             let mut trajectory = Vec::new();
             while !env.is_game_over() {
@@ -191,13 +217,20 @@ where
 
                 let s = env.state_description();
                 let s_t = Tensor::<B, 1>::from_floats(s.as_slice(), device);
-                let logits = model.forward(s_t);
-                let (policy_logits, _value) =
-                    split_policy_value::<B, NUM_ACTIONS>(logits);     // keep just the policy part
-                let logp   = log_softmax(policy_logits);
-                let pi_net: Vec<f32> = logp.exp().into_data().into_vec::<f32>().unwrap();
+                let out = model.forward(s_t);
 
-                let a = WeightedIndex::new(&pi_net).unwrap().sample(&mut rng);
+                let (policy_logits, _value) =
+                    split_policy_value::<B, NUM_ACTIONS>(out);
+
+                let mask_t = Tensor::<B,1>::from_floats(env.action_mask(), device);
+                let masked = policy_logits + (mask_t.clone() - 1.0) * 1e9;
+                let probs  = softmax(masked);
+
+                let dist   = WeightedIndex::new(
+                    &probs.clone().into_data().into_vec::<f32>().unwrap()
+                ).unwrap();
+                let a      = dist.sample(&mut rng);
+
 
                 trajectory.push((s, pi_expert, a));
                 env.step_from_idx(a);
@@ -229,7 +262,7 @@ where
             model = optimizer.step(learning_rate.into(), model, grads);
         }
     }
-    
+
     println!("Mean Score : {:.3}", total_score / episode_stop as f32);
     model
 }
@@ -246,7 +279,7 @@ pub fn run_alpha_zero_expert_apprentice<
         MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS + 1);
 
     let params = DeepLearningParams::default();
-    let mut logger = AlphaZeroExpertLogger::new("./base/alpha_zero_ea", &params);
+    let mut logger = AlphaZeroExpertLogger::new("./data/alpha_zero_ea", &params);
     let trained = episodic_alpha_zero_expert_apprentice::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,

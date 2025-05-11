@@ -95,7 +95,7 @@ where
         let eps = eps_start * (1.0 - ep as f32 / num_episodes as f32)
             + eps_final * (ep as f32 / num_episodes as f32);
 
-        let mut env = Env::default(); env.set_against_random(); env.reset();
+        let mut env = Env::default();
         let mut s = env.state_description();
 
         while !env.is_game_over() {

@@ -44,7 +44,7 @@ where
 
     for ep in tqdm!(0..=num_episodes) {
         if ep % log_every == 0 {
-            logger.log(ep, mean);
+            logger.log(ep, mean / log_every as f32);
             if EXPORT_AT_EP.contains(&ep) {
                 logger.save_model(&model, ep);
             }
@@ -52,8 +52,6 @@ where
         }
 
         let mut env = Env::default();
-        env.set_against_random();
-        env.reset();
 
         // store (state, mask, action, reward)
         let mut traj: Vec<([f32; N_S], [f32; N_A], usize, f32)> = Vec::new();

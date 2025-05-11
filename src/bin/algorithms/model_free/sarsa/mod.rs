@@ -45,7 +45,6 @@ where
 
     let mut total_score = 0.0;
     let mut env = Env::default();
-    env.set_against_random();
     
     for ep_id in tqdm!(0..=num_episodes) {
         let progress = ep_id as f32 / num_episodes as f32;

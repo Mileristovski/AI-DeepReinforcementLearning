@@ -68,21 +68,20 @@ where
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut history: [f32; HS];
     let mut total = 0.0;
+    let mut n_games= 1usize;
     
     for _iter in tqdm!(0..=num_episodes) {
         if _iter % episode_stop == 0 {
-            let mean = total / episode_stop as f32;
+            let mean = total / n_games as f32;
             logger.log(_iter, mean);
             if EXPORT_AT_EP.contains(&_iter) {
                 logger.save_model(&model, _iter);
             }
             total = 0.0;
         }
-        
+
         for _ in 0..games_per_iter {
             let mut env = Env::default();
-            env.set_against_random();
-            env.reset();
             let mut traj = Vec::new();
 
             while !env.is_game_over() {
@@ -105,6 +104,7 @@ where
                 buffer.push((h, pi, z));
             }
             total += env.score();
+            n_games    += 1;
         }
 
         // train
@@ -162,7 +162,7 @@ where
         }
     }
     
-    println!("Mean Score : {:.3}", total / (episode_stop as f32));
+    println!("Mean Score : {:.3}", total / (n_games as f32));
     model
 }
 

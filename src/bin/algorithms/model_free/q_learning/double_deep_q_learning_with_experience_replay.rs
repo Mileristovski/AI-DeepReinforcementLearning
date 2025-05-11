@@ -87,8 +87,6 @@ where
             + (ep as f32 / num_episodes as f32) * final_epsilon;
 
         let mut env = Env::default();
-        env.set_against_random();
-        env.reset();
         let mut s = env.state_description();
 
         while !env.is_game_over() {

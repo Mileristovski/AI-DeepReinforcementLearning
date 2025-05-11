@@ -3,7 +3,7 @@ use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algorithms::helpers::{softmax, log_softmax, get_device, test_trained_model};
+use crate::services::algorithms::helpers::{softmax, log_softmax, get_device, test_trained_model, masked_softmax};
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
@@ -44,7 +44,7 @@ where
     let mut rng     = Xoshiro256PlusPlus::from_entropy();
 
     let mut score_sum = 0.0;
-    let mut env       = Env::default(); env.set_against_random();
+    let mut env       = Env::default(); 
 
     for ep in tqdm!(0..=num_episodes) {
         if ep % log_every == 0 {
@@ -53,23 +53,25 @@ where
             if EXPORT_AT_EP.contains(&ep) {
                 logger.save_model(&policy, ep);
             }
-            score_sum = 0.0;
+            if ep != num_episodes {
+                score_sum = 0.0;
+            }
         }
 
-        // (state, action, reward) buffer
         let mut traj: Vec<([f32; N_S], usize, f32)> = Vec::new();
         let mut s = env.state_description();
 
         while !env.is_game_over() {
-            // ── sample action from policy π(a|s) ─────────────────────
             let logits = policy.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
-            let probs  = softmax(logits.clone());
-            let dist   = WeightedIndex::new(
-                &probs.clone().into_data().into_vec::<f32>().unwrap()
-            ).unwrap();
-            let a = dist.sample(&mut rng);
+            let mask_array = env.action_mask();  // [48] of 0.0 or 1.0
+            let mask_t     = Tensor::<B,1>::from_floats(mask_array, &device);
 
-            // ── env step ─────────────────────────────────────────────
+            // 3. masked softmax: illegal → p = 0
+            let probs      = masked_softmax(logits.clone(), mask_t.clone());
+            let probs_vec  = probs.clone().into_data().into_vec::<f32>().unwrap();
+            let dist       = WeightedIndex::new(&probs_vec).unwrap();
+            let a          = dist.sample(&mut rng);
+
             let prev = env.score(); env.step_from_idx(a);
             let r    = env.score() - prev;
             let s2   = env.state_description();
@@ -77,7 +79,6 @@ where
             traj.push((s, a, r));
             s = s2;
 
-            // ── update every n-step or on terminal ──────────────────
             if traj.len() >= n_step || env.is_game_over() {
                 // bootstrap value for last state
                 let mut r = if env.is_game_over() {
@@ -88,13 +89,11 @@ where
                     ).slice([0..1]).into_scalar()
                 };
 
-                // iterate backwards over the collected segment
                 for (state, action, reward) in traj.iter().rev() {
                     r = reward + gamma * r;
 
                     let s_t = Tensor::<B,1>::from_floats(state.as_slice(), device);
 
-                    // ── critic update (MSE) ────────────────────────
                     let v_pred = critic.forward(s_t.clone()).slice([0..1]);
                     let loss_v = (v_pred.clone() - Tensor::from([r]).to_device(device))
                         .powf_scalar(2.0);
@@ -102,12 +101,12 @@ where
                     let grads_v = GradientsParams::from_grads(grad_v, &critic);
                     critic = opt_val.step(lr_val.into(), critic, grads_v);
 
-                    // ── policy update (advantage) ──────────────────
                     let baseline = v_pred.detach().into_scalar(); // OLD value
                     let advantage = r - baseline;
 
                     let logits_p = policy.forward(s_t.clone());
                     let log_probs = log_softmax(logits_p.clone());
+
                     let logp = log_probs.clone().slice([*action .. action + 1]);
                     let entropy = - (softmax(logits_p.clone()) * log_probs).sum();
 
@@ -120,9 +119,10 @@ where
             }
         }
         score_sum += env.score();
+        env.reset();
     }
 
-    println!("Mean Score : {:.3}", score_sum / log_every as f32);
+    println!("Mean Score : {:.3}", score_sum / (log_every+1) as f32);
     policy
 }
 

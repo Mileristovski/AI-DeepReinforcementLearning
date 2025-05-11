@@ -44,8 +44,6 @@ fn select_action_by_rollout<
     let mut best_a   = usize::MAX;         // sentinel
     let mut best_val = f32::NEG_INFINITY;
 
-    //  NOTE:  `available_actions_ids()` MUST produce a deterministic order
-    //  (or you risk an un-lucky first tie-break dominating behaviour).
     for a in env.available_actions_ids() {
         let q = mc_q(env, a, rollouts_per_action, rng);
         if q > best_val {
@@ -53,7 +51,7 @@ fn select_action_by_rollout<
             best_a   = a;
         }
     }
-    debug_assert!(best_a != usize::MAX, "no legal action?"); // defensive
+    debug_assert!(best_a != usize::MAX, "no legal action?");
     best_a
 }
 
@@ -84,7 +82,6 @@ fn episodic_random_rollout<
     rng: &mut Xoshiro256PlusPlus,
 ) {
     let mut env = Env::default();
-    env.set_against_random();
 
     let mut score_sum = 0.0;
     for ep in tqdm!(0..=episodes) {
@@ -107,8 +104,6 @@ fn test_random_rollout<
 ) {
     loop {
         let mut env = Env::default();
-        env.set_against_random();
-        env.reset();
 
         println!("\n--- Test Episode ---\n");
         let score = run_episode(&mut env, rollouts_per_action, rng);
