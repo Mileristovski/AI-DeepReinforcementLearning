@@ -9,6 +9,7 @@ use burn::prelude::Backend;
 pub type MyBackend = LibTorch;
 pub type MyAutodiffBackend = Autodiff<MyBackend>;
 pub type MyDevice = <MyBackend as Backend>::Device;
+#[allow(dead_code)]
 pub type Enemy<M, B> = <M as AutodiffModule<B>>::InnerModule;
 pub const REPLAY_CAPACITY: usize = 100_000;
 pub const BATCH_SIZE: usize = 32;
@@ -35,6 +36,7 @@ pub fn hidden_sizes() -> Vec<usize> {
 * DEEP LEARNING ALGORITHMS
 * -------------------------------------------------------------------------
 */
+#[allow(dead_code)]
 pub struct DeepLearningParams {
     // … your existing fields …
     pub run_test: bool,

@@ -6,6 +6,7 @@ use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::services::algorithms::helpers::greedy_policy_action;
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
+#[allow(dead_code)]
 pub fn compare_models<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,

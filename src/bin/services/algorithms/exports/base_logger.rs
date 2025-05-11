@@ -15,6 +15,7 @@ pub struct RecordBase {
 }
 
 /// BaseLogger handles directory creation, CSV setup, and writing base records.
+#[allow(dead_code)]
 pub struct BaseLogger {
     writer: Writer<std::fs::File>,
     start_time: Instant,

@@ -17,6 +17,7 @@ use std::fmt::Display;
 use std::time::Instant;
 use crate::services::algorithms::exports::model_based::alpha_zero::alpha_zero_ea::AlphaZeroExpertLogger;
 
+#[allow(dead_code)]
 struct Node<const A: usize> {
     visits: usize,
     value: f32,
