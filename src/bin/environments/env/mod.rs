@@ -7,6 +7,7 @@ pub trait DeepDiscreteActionsEnv<const NUM_STATES_FEATURES: usize, const NUM_ACT
     fn is_game_over(&self) -> bool;
     fn score(&self) -> f32;
     fn reset(&mut self);
+    #[allow(dead_code)]
     fn set_from_random_state(&mut self);
     fn set_against_random(&mut self) -> bool;
     fn step_from_idx(&mut self, action_idx: usize);

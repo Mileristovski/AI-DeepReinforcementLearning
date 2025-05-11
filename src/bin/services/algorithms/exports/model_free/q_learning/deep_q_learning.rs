@@ -11,6 +11,7 @@ use crate::services::algorithms::exports::base_logger::{BaseLogger, RecordBase};
 pub struct DqnCsvRecord(
     usize,   // episode
     f32,     // mean_score
+    f32,     // mean_duration
     f64,     // total_elapsed_secs
     f64,     // interval_elapsed_secs
     usize,   // num_episodes
@@ -62,6 +63,7 @@ impl DqnLogger {
         let rec = DqnCsvRecord(
             base.episode,
             base.mean_score,
+            base.mean_duration.as_secs_f32(),
             base.total_elapsed_secs,
             base.interval_elapsed_secs,
             self.num_episodes,

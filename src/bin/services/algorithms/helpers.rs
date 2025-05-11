@@ -1,7 +1,7 @@
 use rand_distr::Distribution;
 use std::fmt::Display;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use burn::module::AutodiffModule;
 use burn::prelude::*;
 use burn::record::{FullPrecisionSettings, NamedMpkFileRecorder};
@@ -301,6 +301,7 @@ pub fn sample_distinct_weighted(
     set.into_iter().collect()
 }
 
+#[allow(dead_code)]
 pub fn step_with_model<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
@@ -338,7 +339,7 @@ where
         env.switch_board();
     }
 }
-
+#[allow(dead_code)]
 pub fn load_inference_model<M, B>(
     model: M,                 // an *empty* instance of the net
     file_path: impl AsRef<Path>,  // e.g. "model_42.mpk"

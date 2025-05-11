@@ -42,6 +42,7 @@ pub struct DeepLearningParams {
     pub episode_stop: usize,
     pub start_epsilon: f32,
     pub final_epsilon: f32,
+    pub group_testing: Vec<usize>,
 
     // Q‑learning / SARSA
     pub gamma: f32,
@@ -86,6 +87,7 @@ impl Default for DeepLearningParams {
             episode_stop: 100,
             start_epsilon: 1.0,
             final_epsilon: 1e-5,
+            group_testing: vec![1_0, 100],
             
             // Q‑learning / SARSA
             gamma: 0.999,

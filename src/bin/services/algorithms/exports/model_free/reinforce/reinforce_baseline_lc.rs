@@ -11,6 +11,7 @@ use crate::services::algorithms::exports::base_logger::{BaseLogger, RecordBase};
 pub struct ReinforceCsvRecord(
     usize,  // episode
     f32,    // mean_score
+    f32,    // mean_duration
     f64,    // total_elapsed_secs
     f64,    // interval_elapsed_secs
     usize,  // num_episodes
@@ -58,6 +59,7 @@ impl ReinforceLCLogger {
         let rec = ReinforceCsvRecord(
             base_metrics.episode,
             base_metrics.mean_score,
+            base_metrics.mean_duration.as_secs_f32(),
             base_metrics.total_elapsed_secs,
             base_metrics.interval_elapsed_secs,
             self.num_episodes,

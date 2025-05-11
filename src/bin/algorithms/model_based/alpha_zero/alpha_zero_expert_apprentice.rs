@@ -23,6 +23,7 @@ struct Node<const A: usize> {
     children: [Option<usize>; A],
     untried: Vec<usize>,
 }
+#[allow(dead_code)]
 impl<const A: usize> Node<A> {
     fn new(available: impl Iterator<Item=usize>) -> Self {
         Node {

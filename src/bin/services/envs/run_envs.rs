@@ -8,7 +8,7 @@ use std::time::Instant;
 use rand::prelude::IteratorRandom;
 // model-free
 use crate::algorithms::model_free::sarsa::run_episodic_semi_gradient_sarsa;
-use crate::algorithms::model_free::q_learning::tabular_q_learning::run_tabular_q_learning;
+// use crate::algorithms::model_free::q_learning::tabular_q_learning::run_tabular_q_learning;
 use crate::algorithms::model_free::q_learning::deep_q_learning::run_deep_q_learning;
 use crate::algorithms::model_free::q_learning::double_deep_q_learning::run_double_deep_q_learning;
 use crate::algorithms::model_free::q_learning::double_deep_q_learning_with_experience_replay::run_double_deep_q_learning_er;
@@ -90,7 +90,7 @@ pub fn run_benchmark_random_agents<
 >(env: &mut Env, env_name: &str, _from_random: bool) {
     let mut stdout = io::stdout();
     reset_screen(&mut stdout, env_name);
-    
+
     let mut time = 50;
     let mut input = String::new();
     println!("Enter the number of games to simulate:");
@@ -112,10 +112,10 @@ pub fn run_benchmark_random_agents<
     let mut games_played = 0;
     let mut rng = rand::thread_rng();
     let mut total_score = 0.0;
-    
+
     if !env.set_against_random() { env.set_against_random(); }
     env.reset();
-    
+
     for _ in 0..num_games {
 
         while !env.is_game_over() {
@@ -171,16 +171,19 @@ pub fn run_tests_model_free_algorithms<
     let mut params = DeepLearningParams::default();
     params.run_test = false;
 
-    run_episodic_semi_gradient_sarsa::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_tabular_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name, &params);
-    run_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_double_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_double_deep_q_learning_er::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_double_dqn_per::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_reinforce::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_reinforce_baseline::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_reinforce_actor_critic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_ppo_a2c::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    for i in &params.group_testing {
+        params.num_episodes = *i;
+        run_episodic_semi_gradient_sarsa::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        //run_tabular_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name, &params);
+        run_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        run_double_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        run_double_deep_q_learning_er::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        run_double_dqn_per::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        run_reinforce::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        run_reinforce_baseline::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        run_reinforce_actor_critic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        run_ppo_a2c::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    }
 }
 
 /// Run only the **model-based** algorithms.
@@ -195,10 +198,13 @@ pub fn run_tests_model_based_algorithms<
     let mut params = DeepLearningParams::default();
     params.run_test = false;
 
-    run_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_mcts::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_alpha_zero_expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_alpha_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    for i in &params.group_testing {
+        params.num_episodes = *i;
+        run_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        run_mcts::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        run_alpha_zero_expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        run_alpha_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    }
 }
 
 /// Run only the **model-learned** algorithms.
@@ -212,7 +218,9 @@ pub fn run_tests_model_learned_algorithms<
 ) {
     let mut params = DeepLearningParams::default();
     params.run_test = false;
-
-    run_mu_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
-    run_muzero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    for i in &params.group_testing {
+        params.num_episodes = *i;
+        run_mu_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+        run_muzero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
+    }
 }
