@@ -89,9 +89,7 @@ pub fn run_tabular_q_learning<
     const NUM_ACTIONS: usize,
     const NUM_STATES: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATES_FEATURES, NUM_ACTIONS> + Display + Default,
->() {
-    let params = DeepLearningParams::default();
-
+>(env_name: &str, params: DeepLearningParams) {
     // Train
     let q_table = episodic_tabular_q_learning::<NUM_STATES_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(
         params.num_episodes,

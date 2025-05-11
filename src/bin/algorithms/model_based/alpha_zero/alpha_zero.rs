@@ -264,13 +264,14 @@ pub fn run_alpha_zero<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default + Clone,
->() {
+>(env_name: &str,params: DeepLearningParams) {
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
 
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS + 1);
-    let params = DeepLearningParams::default();
-    let mut logger = AlphaZeroLogger::new("./data/alpha_zero", &params);
+    
+    let name = format!("./data/alpha_zero/{}", env_name);
+    let mut logger = AlphaZeroLogger::new(&name, &params);
     let trained = episodic_alpha_zero::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,

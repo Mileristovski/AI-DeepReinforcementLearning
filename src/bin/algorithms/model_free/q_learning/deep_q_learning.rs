@@ -110,7 +110,7 @@ pub fn run_deep_q_learning<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
->()
+>(env_name: &str,params: DeepLearningParams)
 {
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
@@ -120,8 +120,8 @@ pub fn run_deep_q_learning<
     let plus_one  = Tensor::from_floats([ 1.0; NUM_ACTIONS], &device);
     let fmin_vec  = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
 
-    let params = DeepLearningParams::default();
-    let mut logger = DqnLogger::new("./data/dql", &params);
+    let name = format!("./data/dql/{}", env_name);
+    let mut logger = DqnLogger::new(&name, &params);
     let trained = episodic_deep_q_learning::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,

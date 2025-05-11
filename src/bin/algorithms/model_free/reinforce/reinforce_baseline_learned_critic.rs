@@ -122,16 +122,16 @@ pub fn run_reinforce_actor_critic<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
->() {
+>(env_name: &str,params: DeepLearningParams) {
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
 
     // policy & critic nets
     let policy = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
     let critic = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, 1);
-
-    let params = DeepLearningParams::default();
-    let mut logger = ReinforceLCLogger::new("./data/reinforce_lc", &params);
+    
+    let name = format!("./data/reinforce_lc/{}", env_name);
+    let mut logger = ReinforceLCLogger::new(&name, &params);
     let trained_policy = episodic_actor_critic::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,

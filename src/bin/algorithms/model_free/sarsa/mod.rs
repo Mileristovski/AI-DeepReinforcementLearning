@@ -134,7 +134,7 @@ pub fn run_episodic_semi_gradient_sarsa<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display
->(parameters: DeepLearningParams)
+>(env_name: &str,parameters: DeepLearningParams)
 {
     // Set the device for training
     let device: MyDevice = get_device();
@@ -151,7 +151,8 @@ pub fn run_episodic_semi_gradient_sarsa<
     let fmin_vec: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
     // let parameters = DeepLearningParams::default();
     
-    let mut logger = SarsaLogger::new("./data/sarsa/TicTakToe", &parameters);
+    let name = format!("./data/sarsa/{}", env_name);
+    let mut logger = SarsaLogger::new(&name, &parameters);
     
     // Train the model
     let model =

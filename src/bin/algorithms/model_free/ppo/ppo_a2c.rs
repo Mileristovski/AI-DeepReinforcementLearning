@@ -130,15 +130,16 @@ pub fn run_ppo_a2c<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
->() {
+>(env_name: &str,params: DeepLearningParams) {
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
 
     let policy = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
     let critic = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, 1);
     // hyperparameters
-    let params = DeepLearningParams::default();
-    let mut logger = A2cLogger::new("./data/a2c", &params);
+    
+    let name = format!("./data/a2c/{}", env_name);
+    let mut logger = A2cLogger::new(&name, &params);
     let trained = episodic_a2c::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,

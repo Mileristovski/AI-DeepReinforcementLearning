@@ -90,22 +90,22 @@ pub fn submenu_drl<
         let params: DeepLearningParams = DeepLearningParams::default();
 
         match selected_index {
-            0 => { run_episodic_semi_gradient_sarsa::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(params); },
-            1 => { run_tabular_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(); },
-            2 => { run_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            3 => { run_double_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            4 => { run_double_deep_q_learning_er::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            5 => { run_double_dqn_per::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            6 => { run_reinforce::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            7 => { run_reinforce_baseline::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            8 => { run_reinforce_actor_critic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            9 => { run_ppo_a2c::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            10 => { run_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            11 => { run_mcts::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name); },
-            12 => { run_alpha_zero_expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            13 => { run_alpha_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            14 => { run_mu_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
-            15 => { run_muzero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(); },
+            0 => { run_episodic_semi_gradient_sarsa::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            1 => { run_tabular_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name, params); },
+            2 => { run_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            3 => { run_double_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            4 => { run_double_deep_q_learning_er::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            5 => { run_double_dqn_per::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            6 => { run_reinforce::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            7 => { run_reinforce_baseline::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            8 => { run_reinforce_actor_critic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            9 => { run_ppo_a2c::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            10 => { run_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            11 => { run_mcts::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            12 => { run_alpha_zero_expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            13 => { run_alpha_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            14 => { run_mu_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
+            15 => { run_muzero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, params); },
             16 => { break; }
             _ => {}
         }

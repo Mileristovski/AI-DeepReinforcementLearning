@@ -170,14 +170,14 @@ pub fn run_muzero_stochastic<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default + Clone,
->() {
+>(env_name: &str,params: DeepLearningParams) {
     let device = get_device();
     println!("Using device: {:?}", device);
     
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS+1+1+NUM_STATE_FEATURES+NUM_STATE_FEATURES);
 
-    let params = DeepLearningParams::default();
-    let mut logger = MuZeroStochasticLogger::new("./data/mu_zero_sto", &params);
+    let name = format!("./data/mu_zero_sto/{}", env_name);
+    let mut logger = MuZeroStochasticLogger::new(&name, &params);
     let trained = episodic_mu_zero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, _, _, Env>(
         model,
         params.num_episodes,

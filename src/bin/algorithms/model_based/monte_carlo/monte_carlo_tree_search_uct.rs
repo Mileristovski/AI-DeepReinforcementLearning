@@ -207,8 +207,8 @@ pub fn run_mcts<
     Env: DeepDiscreteActionsEnv<S, A> + Display + Default + Clone,
 >(
     env_name: &str,
+    params: DeepLearningParams,
 ) {
-    let params = DeepLearningParams::default();
     let _device: MyDevice = get_device();
     println!("Using device: {:?}", _device);
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(params.rng_seed);

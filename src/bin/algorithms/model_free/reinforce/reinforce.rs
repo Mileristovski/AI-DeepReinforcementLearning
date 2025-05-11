@@ -117,13 +117,14 @@ pub fn run_reinforce<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
->() {
+>(env_name: &str,params: DeepLearningParams) {
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
 
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
-    let params = DeepLearningParams::default();
-    let mut logger = ReinforceLogger::new("./data/reinforce", &params);
+    
+    let name = format!("./data/reinforce/{}", env_name);
+    let mut logger = ReinforceLogger::new(&name, &params);
     let trained = episodic_reinforce::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,

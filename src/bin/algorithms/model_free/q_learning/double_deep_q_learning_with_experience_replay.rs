@@ -172,7 +172,7 @@ pub fn run_double_deep_q_learning_er<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display,
->() {
+>(env_name: &str,params: DeepLearningParams) {
     let device: MyDevice = get_device();
     println!("Using device: {:?}", device);
 
@@ -180,8 +180,9 @@ pub fn run_double_deep_q_learning_er<
     let minus_one = Tensor::from_floats([-1.0; NUM_ACTIONS], &device);
     let plus_one = Tensor::from_floats([1.0; NUM_ACTIONS], &device);
     let fmin_vec = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
-    let params = DeepLearningParams::default();
-    let mut logger = DqnErLogger::new("./data/ddqler", &params, REPLAY_CAPACITY, BATCH_SIZE, TARGET_UPDATE_EVERY);
+    
+    let name = format!("./data/ddqler/{}", env_name);
+    let mut logger = DqnErLogger::new(&name, &params, REPLAY_CAPACITY, BATCH_SIZE, TARGET_UPDATE_EVERY);
     let trained = episodic_double_deep_q_learning_er::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,
