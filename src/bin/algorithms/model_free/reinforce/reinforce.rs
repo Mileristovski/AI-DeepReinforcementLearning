@@ -3,13 +3,14 @@ use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, test_trained_model};
-use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
+use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, step_with_model, test_trained_model};
+use crate::config::{DeepLearningParams, Enemy, MyAutodiffBackend, MyDevice, EXPORT_AT_EP};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use kdam::tqdm;
 use rand::distributions::{Distribution, WeightedIndex};
+use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
 use crate::services::algorithms::exports::model_free::reinforce::reinforce::ReinforceLogger;
 
@@ -37,21 +38,38 @@ where
 {
     let mut opt  = AdamConfig::new().init();
     let mut rng  = Xoshiro256PlusPlus::from_entropy();
-    let mut mean = 0.0f32;
+    let mut total = 0.0f32;
+    let mut model_versions: Vec<M> = Vec::new();
+    let mut playing_againts_model = false;
+    let mut enemy_model= model.valid().clone();
+
 
     // “minus ∞” used for masking illegal actions
     let neg_inf = Tensor::<B,1>::from_floats([-1e9; N_A], device);
 
     for ep in tqdm!(0..=num_episodes) {
+        let mut env = Env::default();
+
         if ep % log_every == 0 {
+            let mean = total / log_every as f32;
             logger.log(ep, mean / log_every as f32);
             if EXPORT_AT_EP.contains(&ep) {
-                logger.save_model(&model, ep);
+                model_versions.push(model.clone());
+                if model_versions.len() > 10 {
+                    model_versions.remove(0);
+                }
+                if !model_versions.is_empty() {
+                    let mut rng = rand::thread_rng();
+                    let non_frozen_enemy_model = model_versions.clone().into_iter().choose(&mut rng).unwrap().clone();
+                    enemy_model = non_frozen_enemy_model.valid().clone();
+                    playing_againts_model = true;
+                    env.set_against_random();
+                    env.set_from_random_state();
+                }
             }
-            mean = 0.0;
+            total = 0.0;
         }
 
-        let mut env = Env::default();
 
         // store (state, mask, action, reward)
         let mut traj: Vec<([f32; N_S], [f32; N_A], usize, f32)> = Vec::new();
@@ -76,7 +94,12 @@ where
             let a = dist.sample(&mut rng);
 
             let prev = env.score();
-            env.step_from_idx(a);
+            if playing_againts_model {
+                step_with_model::<N_S, N_A, Enemy<M, B>, B, Env>(
+                    &mut env, &enemy_model, a, device);
+            } else {
+                env.step_from_idx(a);
+            }
             let r = env.score() - prev;
 
             traj.push((s, mask, a, r));
@@ -105,10 +128,10 @@ where
             model      = opt.step(lr.into(), model, grads);
         }
 
-        mean += env.score();
+        total += env.score();
     }
 
-    println!("Mean Score : {:.3}", mean / log_every as f32);
+    println!("Mean Score : {:.3}", total / log_every as f32);
     model
 }
 

@@ -57,7 +57,7 @@ where
         if ep_id % episode_stop == 0 {
             let mean = total_score / episode_stop as f32;
             logger.log(ep_id, mean);
-            if EXPORT_AT_EP.contains(&ep_id) && false {
+            if EXPORT_AT_EP.contains(&ep_id) {
                 model_versions.push(model.clone());
                 if model_versions.len() > 10 {
                     model_versions.remove(0);
@@ -100,7 +100,7 @@ where
 
         while !env.is_game_over() {
             let prev_score = env.score();
-            if playing_againts_model && false{
+            if playing_againts_model {
                 step_with_model::<NUM_STATE_FEATURES, NUM_ACTIONS, Enemy<M, B>, B, Env>(
                     &mut env, &enemy_model, a, device);
             } else {
