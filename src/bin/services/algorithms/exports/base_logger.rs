@@ -38,7 +38,7 @@ impl BaseLogger {
             .expect("could not open or create metadata.csv");
         let mut writer = Writer::from_writer(file);
         if is_new || metadata(&csv_path).map(|m| m.len() == 0).unwrap_or(true) {
-            writer.write_record(&["episode","mean_score","total_elapsed_secs","interval_elapsed_secs",
+            writer.write_record(&["episode","mean_score", "mean_duration", "total_elapsed_secs","interval_elapsed_secs",
                 "num_episodes","episode_stop","gamma","alpha",
                 "start_epsilon","final_epsilon","weight_decay"]).unwrap();
             writer.flush().unwrap();
