@@ -46,6 +46,7 @@ pub struct DeepLearningParams {
     pub start_epsilon: f32,
     pub final_epsilon: f32,
     pub group_testing: Vec<usize>,
+    pub log_amount: usize,
 
     // Q‑learning / SARSA
     pub gamma: f32,
@@ -86,13 +87,14 @@ impl Default for DeepLearningParams {
     fn default() -> Self {
         Self {
             test_models_nb_games: 1000,
-            num_tries: 100,
+            num_tries: 10000,
             run_test: true,
-            num_episodes: 10000,
+            num_episodes: 1000,
             episode_stop: 100,
             start_epsilon: 1.0,
             final_epsilon: 1e-5,
             group_testing: vec![1000],
+            log_amount: 100,
             
             // Q‑learning / SARSA
             gamma: 0.999,

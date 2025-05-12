@@ -170,9 +170,12 @@ pub fn run_tests_model_free_algorithms<
 ) {
     let mut params = DeepLearningParams::default();
     params.run_test = false;
+    params.episode_stop = params.num_episodes / params.log_amount;
 
     for i in &params.group_testing {
         params.num_episodes = *i;
+        params.episode_stop = i / params.log_amount;
+        
         run_episodic_semi_gradient_sarsa::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
         //run_tabular_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name, &params);
         run_deep_q_learning::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
@@ -200,6 +203,8 @@ pub fn run_tests_model_based_algorithms<
 
     for i in &params.group_testing {
         params.num_episodes = *i;
+        params.episode_stop = i / params.log_amount;
+        
         run_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
         run_mcts::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
         run_alpha_zero_expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
@@ -220,6 +225,8 @@ pub fn run_tests_model_learned_algorithms<
     params.run_test = false;
     for i in &params.group_testing {
         params.num_episodes = *i;
+        params.episode_stop = params.num_episodes / params.log_amount;
+        
         run_mu_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
         run_muzero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params);
     }
