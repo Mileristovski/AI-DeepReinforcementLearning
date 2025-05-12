@@ -93,7 +93,7 @@ impl DoubleDqnLogger {
         M: Module<B>,
         B: Backend,
     {
-        let path = self.base.run_dir().join(format!("double_dqn_model_{ep}.mpk"));
+        let path = self.base.run_dir().join(format!("double_dql_model_{ep}.mpk"));
         let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
         model.clone().save_file(path, &recorder).expect("failed saving Double DQN model");
     }

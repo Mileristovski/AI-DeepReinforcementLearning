@@ -12,7 +12,7 @@ use std::time::Instant;
 use kdam::tqdm;
 use rand::distributions::{Distribution, WeightedIndex};
 use rand::SeedableRng;
-use crate::services::algorithms::exports::model_free::reinforce::reinforce_baseline_lc::ReinforceLCLogger;
+use crate::services::algorithms::exports::model_free::reinforce::reinforce_baseline_ac::ReinforceLCLogger;
 
 pub fn episodic_actor_critic<
     const NUM_STATE_FEATURES: usize,

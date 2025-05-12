@@ -84,7 +84,7 @@ impl ReinforceLCLogger {
         M: Module<B>,
         B: Backend,
     {
-        let path = self.base.run_dir().join(format!("reinforce_model_{episode}.mpk"));
+        let path = self.base.run_dir().join(format!("reinforce_ac_model_{episode}.mpk"));
         let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
         model.clone().save_file(path, &recorder).expect("failed saving REINFORCE model");
     }

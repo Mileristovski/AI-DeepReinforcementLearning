@@ -92,7 +92,7 @@ impl SarsaLogger {
         M: Module<B>,
         B: Backend,
     {
-        let path = self.base.run_dir().join(format!("model_{ep}.mpk"));
+        let path = self.base.run_dir().join(format!("sarsa_model_{ep}.mpk"));
         let rec  = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
         model.clone().save_file(path, &rec).expect("failed saving model");
     }
