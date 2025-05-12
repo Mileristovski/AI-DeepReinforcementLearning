@@ -1,33 +1,61 @@
 use std::fmt::Display;
-use burn::module::AutodiffModule;
-use burn::prelude::{Backend, Tensor};
-use crate::config::{MyAutodiffBackend, MyBackend};
+use burn::prelude::Tensor;
+use crate::config::{MyAutodiffBackend, MyBackend, MyDevice};
 use crate::environments::env::DeepDiscreteActionsEnv;
-use crate::services::algorithms::helpers::greedy_policy_action;
+use crate::services::algorithms::helpers::{get_device, greedy_policy_action, load_inference_model};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
-#[allow(dead_code)]
 pub fn compare_models<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default + Clone,
 >(
-    device: &<MyBackend as Backend>::Device,
-    model1: MyQmlp<MyAutodiffBackend>,
-    model2: MyQmlp<MyAutodiffBackend>,
+    model_path_1: &str,
+    model_path_2: &str,
     num_games: usize,
 ) -> (f32, f32, f32) // Returns (model1_wins, model2_wins, draws) as percentages
 where
     MyQmlp<MyBackend>: Forward<B = MyBackend>,
 {
-    let valid_model1: MyQmlp<MyBackend> = model1.valid();
-    let valid_model2: MyQmlp<MyBackend> = model2.valid();
-    let fmin_vec = Tensor::<MyBackend, 1>::from_floats([f32::MIN; NUM_ACTIONS], device);
+    let model1_name = std::path::Path::new(model_path_1)
+        .file_name()
+        .unwrap()
+        .to_string_lossy();
+    let model2_name = std::path::Path::new(model_path_2)
+        .file_name()
+        .unwrap()
+        .to_string_lossy();
+    
+    // ── 0. pick a device ────────────────────────────────────────────────
+    let device: MyDevice = get_device();
+
+    // ── 1. create an *empty* template network (same constructor you use) ─
+    let template = MyQmlp::<MyAutodiffBackend>::new(
+        &device,
+        NUM_STATE_FEATURES,
+        NUM_ACTIONS,
+    );
+
+    // ── 2. load weights from disk and get the INNER (no-grad) model ─────
+    let valid_model1 = load_inference_model::<_, MyAutodiffBackend>(
+        template.clone(),
+        model_path_1,   // point to any existing checkpoint
+        &device,
+    );
+    
+    let valid_model2 = load_inference_model::<_, MyAutodiffBackend>(
+        template,
+        model_path_2,   // point to any existing checkpoint
+        &device,
+    );
+    
+    let fmin_vec = Tensor::<MyBackend, 1>::from_floats([f32::MIN; NUM_ACTIONS], &device);
 
     let mut model1_wins = 0f32;
     let mut model2_wins = 0f32;
     let mut draws = 0f32;
 
+    println!("Starting tests {} vs {}...", model1_name, model2_name);
     for game in 0..num_games {
         let mut env = Env::default();
         let (first_model, second_model) = if game % 2 == 0 {
@@ -40,8 +68,8 @@ where
         while !env.is_game_over() {
             let current_model = if current_player == 0 { first_model } else { second_model };
 
-            let s_tensor = Tensor::<MyBackend, 1>::from_floats(env.state_description().as_slice(), device);
-            let mask_tensor = Tensor::<MyBackend, 1>::from(env.action_mask()).to_device(device);
+            let s_tensor = Tensor::<MyBackend, 1>::from_floats(env.state_description().as_slice(), &device);
+            let mask_tensor = Tensor::<MyBackend, 1>::from(env.action_mask()).to_device(&device);
 
             let out = current_model.forward(s_tensor);
             let policy_logits = out.clone().slice([0..NUM_ACTIONS]);
@@ -62,9 +90,12 @@ where
         }
 
         // Print progress
-        if (game + 1) % 10 == 0 {
-            println!("Completed {} games", game + 1);
-            println!("Current stats: Model1 wins: {:.1}%, Model2 wins: {:.1}%, Draws: {:.1}%",
+        if (game + 1) % 200 == 0 {
+            println!("Completed {}/{} games →  current stats: {} wins: {:.1}%, {} wins: {:.1}%, Draws: {:.1}%",
+                     game + 1,
+                     num_games,
+                     model1_name,
+                     model2_name,
                      100.0 * model1_wins / (game as f32 + 1.0),
                      100.0 * model2_wins / (game as f32 + 1.0),
                      100.0 * draws / (game as f32 + 1.0));
@@ -77,5 +108,95 @@ where
         100.0 * model1_wins / total_games,
         100.0 * model2_wins / total_games,
         100.0 * draws / total_games
+    )
+}
+
+
+pub fn compare_model_vs_random<
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    Env,
+>(
+    model_path: &str,
+    num_games:  usize,
+) -> (f32, f32, f32)        // (model %, random %, draws %)
+where
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS>
+    + Display
+    + Default
+    + Clone,
+    MyQmlp<MyBackend>: Forward<B = MyBackend>,
+{
+    let model_name = std::path::Path::new(model_path)
+        .file_name()
+        .unwrap()
+        .to_string_lossy();
+    // ── 0. pick device ────────────────────────────────────────────────
+    let device: MyDevice = get_device();
+
+    // ── 1. template net + load weights (no-grad inner model) ──────────
+    let template = MyQmlp::<MyAutodiffBackend>::new(&device,
+                                                    NUM_STATE_FEATURES,
+                                                    NUM_ACTIONS);
+    let policy = load_inference_model::<_, MyAutodiffBackend>(
+        template,
+        model_path,
+        &device,
+    );
+
+    // ── 2. bookkeeping ────────────────────────────────────────────────
+    let fmin_vec = Tensor::<MyBackend, 1>::from_floats([f32::MIN; NUM_ACTIONS],
+                                                       &device);
+    let mut model_wins  = 0f32;
+    let mut random_wins = 0f32;
+    let mut draws       = 0f32;
+
+    println!("Starting tests {} vs random...", model_name);
+    // ── 3. play many games ────────────────────────────────────────────
+    let mut env = Env::default();
+    for game in 0..num_games {
+        env.reset();
+        while !env.is_game_over() {
+            let mask = env.action_mask();
+            let s_tensor = Tensor::<MyBackend, 1>::from_floats(
+                env.state_description().as_slice(),
+                &device,
+            );
+            let mask_t = Tensor::<MyBackend, 1>::from(mask).to_device(&device);
+
+            let logits   = policy.forward(s_tensor);
+            let logits   = logits.slice([0..NUM_ACTIONS]);
+            let action   = greedy_policy_action::<MyBackend>(&logits,
+                                                             &mask_t,
+                                                             &fmin_vec);
+            env.step_from_idx(action);
+        }
+
+        // ── 4. update statistics ──────────────────────────────────────
+        if env.score() == 1.0 {
+            model_wins += 1.0
+        } else {
+            random_wins += 1.0
+        }
+
+        if (game + 1) % 200 == 0 {
+            println!(
+                "Completed {}/{} games → {} {:.1} %, random {:.1} %, draws {:.1} %",
+                game + 1,
+                num_games,
+                model_name,
+                100.0 * model_wins  / (game + 1) as f32,
+                100.0 * random_wins / (game + 1) as f32,
+                100.0 * draws       / (game + 1) as f32,
+            );
+        }
+    }
+
+    // ── 5. percentages ────────────────────────────────────────────────
+    let n = num_games as f32;
+    (
+        100.0 * model_wins  / n,
+        100.0 * random_wins / n,
+        100.0 * draws       / n,
     )
 }

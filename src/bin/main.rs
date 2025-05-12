@@ -16,9 +16,9 @@ use environments::bobail::{ BobailHeuristic, BB_NUM_ACTIONS, BB_NUM_STATE_FEATUR
 fn main() {
     loop {
         let options = vec![
-            "Line World",
-            "Grid World",
-            "Tic Tac Toe",
+            "LineWorld",
+            "GridWorld",
+            "TicTacToe",
             "Bobail",
             "Quit"
         ];

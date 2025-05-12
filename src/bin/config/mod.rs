@@ -38,7 +38,7 @@ pub fn hidden_sizes() -> Vec<usize> {
 */
 #[allow(dead_code)]
 pub struct DeepLearningParams {
-    // … your existing fields …
+    pub test_models_nb_games: usize,
     pub run_test: bool,
     pub num_episodes: usize,
     pub episode_stop: usize,
@@ -84,8 +84,9 @@ pub struct DeepLearningParams {
 impl Default for DeepLearningParams {
     fn default() -> Self {
         Self {
+            test_models_nb_games: 1000,
             run_test: true,
-            num_episodes: 1000,
+            num_episodes: 10000,
             episode_stop: 100,
             start_epsilon: 1.0,
             final_epsilon: 1e-5,
