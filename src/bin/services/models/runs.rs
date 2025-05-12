@@ -166,6 +166,7 @@ pub fn run_model_vs_random<
                     compare_model_vs_random::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(
                         mpk.to_str().unwrap(),
                         num_games,
+                        params.num_tries,
                     );
 
                 writeln!(

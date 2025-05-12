@@ -56,7 +56,7 @@ impl SarsaLogger {
 
         // Print
         println!(
-            "Mean Score: {:.3} / Mean Duration {:.3} (episode {} — {:.2?} elapsed)",
+            "SARSA - Mean Score: {:.3} / Mean Duration {:.3} (episode {} — {:.2?} elapsed)",
             mean_score, mean_duration.as_secs_f32()
             , episode, elapsed
         );

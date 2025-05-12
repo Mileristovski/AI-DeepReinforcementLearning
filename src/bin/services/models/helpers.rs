@@ -155,6 +155,7 @@ pub fn compare_model_vs_random<
 >(
     model_path: &str,
     num_games:  usize,
+    num_tries: usize,
 ) -> (f32, f32, f32)        
 where
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS>
@@ -186,13 +187,14 @@ where
     let mut model_wins  = 0f32;
     let mut random_wins = 0f32;
     let mut draws       = 0f32;
+    let mut count = 0usize;
 
     println!("Starting tests {} vs random...", model_name);
     // 3. play many games 
     let mut env = Env::default();
     for game in 0..num_games {
         env.reset();
-        while !env.is_game_over() {
+        while !env.is_game_over() && count < num_tries {
             let mask = env.action_mask();
             let s_tensor = Tensor::<MyBackend, 1>::from_floats(
                 env.state_description().as_slice(),
@@ -206,13 +208,18 @@ where
                                                              &mask_t,
                                                              &fmin_vec);
             env.step_from_idx(action);
+            count += 1;
         }
 
         // 4. update statistics 
-        if env.score() == 1.0 {
-            model_wins += 1.0
+        if count >= num_tries {
+            draws += 1.0;
         } else {
-            random_wins += 1.0
+            if env.score() == 1.0 {
+                model_wins += 1.0
+            } else {
+                random_wins += 1.0
+            }
         }
 
         if (game + 1) % 200 == 0 {
