@@ -11,9 +11,7 @@ use std::time::Instant;
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::services::algorithms::exports::model_free::reinforce::reinforce_mean_baseline::ReinforceBaselineLogger;
-use crate::services::algorithms::helpers::{
-    get_device, masked_log_softmax, masked_softmax, test_trained_model,
-};
+use crate::services::algorithms::helpers::{get_device, masked_log_softmax, softmax, test_trained_model};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -45,6 +43,7 @@ where
     let mut rng   = Xoshiro256PlusPlus::from_entropy();
     let mut score_sum = 0.0f32;
     let mut total_duration = std::time::Duration::new(0, 0);
+    let neg_inf = Tensor::<B,1>::from_floats([-1e9; N_A], device);
 
     // each episode ---------------------------------------------------------
     for ep in tqdm!(0..num_episodes) {
@@ -65,11 +64,20 @@ where
             let s = env.state_description();
             let mask_arr = env.action_mask();
 
-            let logits   = model.forward(Tensor::<B, 1>::from_floats(s.as_slice(), device));
-            let mask_t   = Tensor::<B, 1>::from(mask_arr).to_device(device);
-            let probs    = masked_softmax(logits, mask_t);
-            let weights  = probs.into_data().into_vec::<f32>().unwrap();
-            let dist     = WeightedIndex::new(&weights).expect("invalid probs");
+            let logits = model.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
+
+            let mask   = env.action_mask();
+            let mask_t = Tensor::<B,1>::from(mask).to_device(device);
+
+            // masked soft-max
+            let adj = logits.clone() * mask_t.clone()
+                + neg_inf.clone() * (mask_t.clone().neg().add_scalar(1.0));
+            let probs = softmax(adj);
+
+            // safe sampling (skip the step if all probs are ~0)
+            let p_vec = probs.clone().into_data().into_vec::<f32>().unwrap();
+            let dist  = WeightedIndex::new(&p_vec)
+                .unwrap_or_else(|_| WeightedIndex::new(&[1.0; N_A]).unwrap());
             let a        = dist.sample(&mut rng);
 
             let prev_score = env.score();

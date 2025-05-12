@@ -3,14 +3,14 @@ use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algorithms::helpers::{get_device, log_softmax, masked_softmax, test_trained_model};
+use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, test_trained_model};
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use std::time::Instant;
 use kdam::tqdm;
-use rand::distributions::Distribution;
+use rand::distributions::{Distribution, WeightedIndex};
 use rand::SeedableRng;
 use crate::services::algorithms::exports::model_free::reinforce::reinforce_baseline_lc::ReinforceLCLogger;
 
@@ -58,7 +58,7 @@ where
 
         // collect one episode
         let mut env = Env::default();
-
+        let neg_inf = Tensor::<B,1>::from_floats([-1e9; NUM_ACTIONS], device);
         let mut trajectory: Vec<([f32; NUM_STATE_FEATURES], usize, f32)> = Vec::new();
         let mut s = env.state_description();
         
@@ -67,14 +67,19 @@ where
             // policy forward
             let s_t = Tensor::<B, 1>::from_floats(s.as_slice(), device);
             let logits = policy.forward(s_t);
-            let mask_t = Tensor::<B, 1>::from(env.action_mask()).to_device(device);
-            let probs  = masked_softmax(logits, mask_t);            // you can integrate mask if desired
-            let probs_v: Vec<f32> = probs
-                .clone()
-                .into_data()
-                .into_vec::<f32>()
-                .unwrap();
-            let dist = rand::distributions::WeightedIndex::new(&probs_v).unwrap();
+
+            let mask   = env.action_mask();
+            let mask_t = Tensor::<B,1>::from(mask).to_device(device);
+
+            // masked soft-max
+            let adj = logits.clone() * mask_t.clone()
+                + neg_inf.clone() * (mask_t.clone().neg().add_scalar(1.0));
+            let probs = softmax(adj);
+
+            // safe sampling (skip the step if all probs are ~0)
+            let p_vec = probs.clone().into_data().into_vec::<f32>().unwrap();
+            let dist  = WeightedIndex::new(&p_vec)
+                .unwrap_or_else(|_| WeightedIndex::new(&[1.0; NUM_ACTIONS]).unwrap());
             let a = dist.sample(&mut rng);
 
             let prev = env.score();
