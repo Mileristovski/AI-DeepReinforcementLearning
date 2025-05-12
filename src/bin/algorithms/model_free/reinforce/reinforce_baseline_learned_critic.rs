@@ -133,7 +133,7 @@ pub fn run_reinforce_actor_critic<
     let policy = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
     let critic = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, 1);
     
-    let name = format!("./data/reinforce_lc/{}", env_name);
+    let name = format!("./data/{}/reinforce_lc", env_name);
     let mut logger = ReinforceLCLogger::new(&name, &params);
     let trained_policy = episodic_actor_critic::<
         NUM_STATE_FEATURES,

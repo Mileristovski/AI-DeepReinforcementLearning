@@ -139,7 +139,7 @@ pub fn run_ppo_a2c<
     let critic = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, 1);
     // hyperparameters
     
-    let name = format!("./data/a2c/{}", env_name);
+    let name = format!("./data/{}/a2c", env_name);
     let mut logger = A2cLogger::new(&name, &params);
     let trained = episodic_a2c::<
         NUM_STATE_FEATURES,

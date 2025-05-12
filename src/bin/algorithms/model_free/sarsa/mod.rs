@@ -156,7 +156,7 @@ pub fn run_episodic_semi_gradient_sarsa<
     let fmin_vec: Tensor<MyAutodiffBackend, 1> = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
     // let parameters = DeepLearningParams::default();
     
-    let name = format!("./data/sarsa/{}", env_name);
+    let name = format!("./data/{}/sarsa", env_name);
     let mut logger = SarsaLogger::new(&name, &parameters);
     
     // Train the model

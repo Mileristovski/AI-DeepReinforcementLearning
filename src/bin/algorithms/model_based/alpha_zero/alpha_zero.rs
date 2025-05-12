@@ -270,7 +270,7 @@ pub fn run_alpha_zero<
 
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS + 1);
     
-    let name = format!("./data/alpha_zero/{}", env_name);
+    let name = format!("./data/{}/alpha_zero", env_name);
     let mut logger = AlphaZeroLogger::new(&name, &params);
     let trained = episodic_alpha_zero::<
         NUM_STATE_FEATURES,

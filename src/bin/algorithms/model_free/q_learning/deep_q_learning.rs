@@ -124,7 +124,7 @@ pub fn run_deep_q_learning<
     let plus_one  = Tensor::from_floats([ 1.0; NUM_ACTIONS], &device);
     let fmin_vec  = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
 
-    let name = format!("./data/dql/{}", env_name);
+    let name = format!("./data/{}/dql", env_name);
     let mut logger = DqnLogger::new(&name, &params);
     let trained = episodic_deep_q_learning::<
         NUM_STATE_FEATURES,

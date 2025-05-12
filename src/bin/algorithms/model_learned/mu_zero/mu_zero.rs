@@ -168,7 +168,7 @@ pub fn run_mu_zero<
     // out‑dim = policy (A) + value (1) + reward (1)
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, N_S, N_A + 2);
 
-    let name = format!("./data/mu_zero/{}", env_name);
+    let name = format!("./data/{}/mu_zero", env_name);
     let mut logger = MuZeroLogger::new(&name, &p);
     let trained = episodic_mu_zero::<N_S, N_A, _, _, Env>(
         model,

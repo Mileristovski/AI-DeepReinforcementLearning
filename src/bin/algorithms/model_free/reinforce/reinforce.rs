@@ -47,7 +47,7 @@ where
     for ep in tqdm!(0..num_episodes) {
         if ep % log_every == 0 {
             let mean_duration = total_duration / log_every as u32;
-            logger.log(ep, mean, mean_duration);
+            logger.log(ep, mean / log_every as f32, mean_duration);
             mean = 0.0;
         }
 
@@ -110,7 +110,7 @@ where
     }
 
     logger.save_model(&model, num_episodes);
-    println!("Mean Score : {:.3}", mean / log_every as f32);
+    println!("Mean Score : {:.3}", mean / num_episodes as f32);
     model
 }
 
@@ -125,7 +125,7 @@ pub fn run_reinforce<
 
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
     
-    let name = format!("./data/reinforce/{}", env_name);
+    let name = format!("./data/{}/reinforce", env_name);
     let mut logger = ReinforceLogger::new(&name, &params);
     let trained = episodic_reinforce::<
         NUM_STATE_FEATURES,

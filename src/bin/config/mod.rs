@@ -92,7 +92,7 @@ impl Default for DeepLearningParams {
             episode_stop: 100,
             start_epsilon: 1.0,
             final_epsilon: 1e-5,
-            group_testing: vec![1_0, 100],
+            group_testing: vec![1000],
             
             // Q‑learning / SARSA
             gamma: 0.999,

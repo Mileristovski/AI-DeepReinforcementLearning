@@ -124,7 +124,7 @@ pub fn run_reinforce_baseline<
 
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, N_S, N_A);
     
-    let name = format!("./data/reinforce_mb/{}", env_name);
+    let name = format!("./data/{}/reinforce_mb", env_name);
     let mut logger = ReinforceBaselineLogger::new(&name, &p);
     let trained = episodic_reinforce_baseline::<N_S, N_A, _, MyAutodiffBackend, Env>(
         model,
