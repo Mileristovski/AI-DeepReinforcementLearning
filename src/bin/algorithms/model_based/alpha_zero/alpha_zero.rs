@@ -16,7 +16,6 @@ use rand::prelude::{Distribution, IteratorRandom};
 use crate::services::algorithms::exports::model_based::alpha_zero::alpha_zero::AlphaZeroLogger;
 // bring in only the underlying search kernel, not the CLI runner:
 
-/// split a length-(A+1) tensor into ([0..A) policy logits, [A] value)
 fn split_policy_value<B: Backend>(
     out: Tensor<B, 1>,
 ) -> (Tensor<B, 1>, Tensor<B, 1>) {
@@ -27,7 +26,6 @@ fn split_policy_value<B: Backend>(
     (policy_logits, value_v)
 }
 
-/// run num_sims of UCT from `root_env` (cloned), then return a π proportional to child visits.
 pub fn run_mcts_policy<
     const S: usize,
     const A: usize,
@@ -144,7 +142,7 @@ pub fn run_mcts_policy<
         }
     }
 
-    // ─────────────  Derive π from child visits  ─────────────────────
+    // ─────────────  Derive pi from child visits  ─────────────────────
     let mut pi = [0.0f32; A];
     let root   = &tree[0];
 
@@ -166,13 +164,11 @@ pub fn run_mcts_policy<
     pi
 }
 
-/// sample an index from a fixed‑size probability array
-fn sample_from<const A: usize>(probs: [f32; A], rng: &mut impl rand::Rng) -> usize {
+fn sample_from<const A: usize>(probs: [f32; A], rng: &mut impl Rng) -> usize {
     let dist = WeightedIndex::new(&probs).unwrap();
     dist.sample(rng)
 }
 
-/// AlphaZero: self‑play + MCTS + joint policy/value network training
 pub fn episodic_alpha_zero<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
