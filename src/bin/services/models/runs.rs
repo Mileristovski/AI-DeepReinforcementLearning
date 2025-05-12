@@ -3,7 +3,6 @@ use std::{
     io::{BufWriter, Write},
     path::{Path, PathBuf},
 };
-
 use std::fmt::Display;
 use crate::config::{DeepLearningParams, MyBackend};
 use crate::services::algorithms::model::{MyQmlp, Forward};
@@ -11,7 +10,6 @@ use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::gui::cli::common::end_of_run;
 use crate::services::models::helpers::{compare_model_vs_random, compare_models};
 
-/// Helper: open a CSV in *append* mode and write a header if it did not exist.
 fn csv_writer(path: &Path, header: &str) -> BufWriter<fs::File> {
     let new_file = !path.exists();
     let file = OpenOptions::new()
@@ -43,7 +41,7 @@ pub fn run_compare_models<
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default + Clone,
 >(
-    env_name: &str,      // pass 0 to use $NUM_GAMES or the built-in default
+    env_name: &str,      
 ) where
     MyQmlp<MyBackend>: Forward<B = MyBackend>,
 {
@@ -62,7 +60,6 @@ pub fn run_compare_models<
         let crit_dir = crit_entry.expect("io error").path();
         if !crit_dir.is_dir() { continue; }
 
-        // collect every *.mp4 inside this criterion
         let mut mpks: Vec<_> = fs::read_dir(&crit_dir)
             .unwrap()
             .filter_map(|e| {
@@ -93,12 +90,16 @@ pub fn run_compare_models<
                     a.to_str().unwrap(),
                     b.to_str().unwrap(),
                     num_games,
+                    params.num_tries,
+                    env_name
                 );
                 // 2) B starts first
                 let (wb2, wa2, _) = compare_models::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(
                     b.to_str().unwrap(),
                     a.to_str().unwrap(),
                     num_games,
+                    params.num_tries,
+                    env_name
                 );
 
                 // average the two runs
@@ -129,15 +130,12 @@ pub fn run_compare_models<
     end_of_run();
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-//  2. compare each .mp4 model individually to the env’s random player
-// ──────────────────────────────────────────────────────────────────────────
 pub fn run_model_vs_random<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default + Clone,
 >(
-    env_name: &str,       // pass 0 to use $NUM_GAMES or the built-in default
+    env_name: &str,       
 ) where
     MyQmlp<MyBackend>: Forward<B = MyBackend>,
 {

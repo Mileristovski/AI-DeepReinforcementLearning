@@ -405,7 +405,6 @@ impl DeepDiscreteActionsEnv<BB_NUM_STATE_FEATURES, BB_NUM_ACTIONS> for BobailHeu
 
     fn step_from_idx(&mut self, action_idx: usize) {
         if action_idx > BB_NUM_ACTIONS-1 {
-            // println!("Invalid action index: {}", action_idx);
             return;
         }
         let action = self.actions_lookup[action_idx];

@@ -288,7 +288,7 @@ pub fn greedy_policy_action<B: Backend<FloatElem = f32, IntElem = i64>>(
 pub fn sample_distinct_weighted(
     probs: &[f32],
     batch: usize,
-    rng: &mut impl rand::Rng,
+    rng: &mut impl Rng,
 ) -> Vec<usize> {
     use rand::distributions::WeightedIndex;
     use std::collections::HashSet;
@@ -319,7 +319,7 @@ where
     M: Forward<B = B::InnerBackend>,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS>,
 {
-    env.step_from_idx(action);
+    env.step(action);
 
     if !env.is_game_over() {
         env.switch_board();
@@ -339,6 +339,7 @@ where
         env.switch_board();
     }
 }
+
 #[allow(dead_code)]
 pub fn load_inference_model<M, B>(
     model: M,                 // an *empty* instance of the net

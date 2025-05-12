@@ -1,7 +1,11 @@
 use std::fmt::Display;
+use std::io;
+use std::thread::sleep;
+use std::time::Duration;
 use burn::prelude::Tensor;
 use crate::config::{MyAutodiffBackend, MyBackend, MyDevice};
 use crate::environments::env::DeepDiscreteActionsEnv;
+use crate::gui::cli::common::reset_screen;
 use crate::services::algorithms::helpers::{get_device, greedy_policy_action, load_inference_model};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
@@ -13,7 +17,9 @@ pub fn compare_models<
     model_path_1: &str,
     model_path_2: &str,
     num_games: usize,
-) -> (f32, f32, f32) // Returns (model1_wins, model2_wins, draws) as percentages
+    num_tries: usize,
+    env_name: &str,
+) -> (f32, f32, f32) 
 where
     MyQmlp<MyBackend>: Forward<B = MyBackend>,
 {
@@ -26,17 +32,17 @@ where
         .unwrap()
         .to_string_lossy();
     
-    // ── 0. pick a device ────────────────────────────────────────────────
+    // 0. pick a device 
     let device: MyDevice = get_device();
 
-    // ── 1. create an *empty* template network (same constructor you use) ─
+    // 1. create an *empty* template network (same constructor you use) 
     let template = MyQmlp::<MyAutodiffBackend>::new(
         &device,
         NUM_STATE_FEATURES,
         NUM_ACTIONS,
     );
 
-    // ── 2. load weights from disk and get the INNER (no-grad) model ─────
+    // 2. load weights from disk and get the INNER (no-grad) model 
     let valid_model1 = load_inference_model::<_, MyAutodiffBackend>(
         template.clone(),
         model_path_1,   // point to any existing checkpoint
@@ -54,7 +60,20 @@ where
     let mut model1_wins = 0f32;
     let mut model2_wins = 0f32;
     let mut draws = 0f32;
-
+    println!("Enable visual mode? (yes/no):");
+    
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).expect("Failed to read input");
+    let visual = input.trim().eq_ignore_ascii_case("yes");
+    
+    let mut time = 50;
+    if visual {
+        input.clear();
+        println!("How long should a match last ? (in milliseconds) :");
+        io::stdin().read_line(&mut input).expect("Failed to read input");
+        time = input.trim().parse().unwrap_or(50);
+    }
+    
     println!("Starting tests {} vs {}...", model1_name, model2_name);
     for game in 0..num_games {
         let mut env = Env::default();
@@ -64,8 +83,18 @@ where
             (&valid_model2, &valid_model1)
         };
         let mut current_player = 0;
-
-        while !env.is_game_over() {
+        let mut bobail: bool = false;
+        
+        env.set_against_random();
+        let mut count = 0usize;
+        while !env.is_game_over() && count < num_tries {
+            if visual {
+                let mut stdout = io::stdout();
+                println!("{}", env);
+                sleep(Duration::from_millis(time));
+                reset_screen(&mut stdout, env_name);
+            }
+            
             let current_model = if current_player == 0 { first_model } else { second_model };
 
             let s_tensor = Tensor::<MyBackend, 1>::from_floats(env.state_description().as_slice(), &device);
@@ -74,10 +103,17 @@ where
             let out = current_model.forward(s_tensor);
             let policy_logits = out.clone().slice([0..NUM_ACTIONS]);
             let action = greedy_policy_action::<MyBackend>(&policy_logits, &mask_tensor, &fmin_vec);
-
+            
+            env.switch_board();
             env.step_from_idx(action);
             env.switch_board();
-            current_player = if current_player == 0 { 1 } else { 0 }
+            if !bobail {
+                bobail = !bobail;
+            } else {
+                current_player = if current_player == 1 { 0 } else  { 1 };
+                bobail = !bobail;
+            }
+            count += 1;
         }
 
         let final_score = env.score();
@@ -119,7 +155,7 @@ pub fn compare_model_vs_random<
 >(
     model_path: &str,
     num_games:  usize,
-) -> (f32, f32, f32)        // (model %, random %, draws %)
+) -> (f32, f32, f32)        
 where
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS>
     + Display
@@ -131,10 +167,10 @@ where
         .file_name()
         .unwrap()
         .to_string_lossy();
-    // ── 0. pick device ────────────────────────────────────────────────
+    // 0. pick device 
     let device: MyDevice = get_device();
 
-    // ── 1. template net + load weights (no-grad inner model) ──────────
+    // 1. template net + load weights (no-grad inner model) 
     let template = MyQmlp::<MyAutodiffBackend>::new(&device,
                                                     NUM_STATE_FEATURES,
                                                     NUM_ACTIONS);
@@ -144,7 +180,7 @@ where
         &device,
     );
 
-    // ── 2. bookkeeping ────────────────────────────────────────────────
+    // 2. bookkeeping 
     let fmin_vec = Tensor::<MyBackend, 1>::from_floats([f32::MIN; NUM_ACTIONS],
                                                        &device);
     let mut model_wins  = 0f32;
@@ -152,7 +188,7 @@ where
     let mut draws       = 0f32;
 
     println!("Starting tests {} vs random...", model_name);
-    // ── 3. play many games ────────────────────────────────────────────
+    // 3. play many games 
     let mut env = Env::default();
     for game in 0..num_games {
         env.reset();
@@ -172,7 +208,7 @@ where
             env.step_from_idx(action);
         }
 
-        // ── 4. update statistics ──────────────────────────────────────
+        // 4. update statistics 
         if env.score() == 1.0 {
             model_wins += 1.0
         } else {
@@ -192,7 +228,7 @@ where
         }
     }
 
-    // ── 5. percentages ────────────────────────────────────────────────
+    // 5. percentages 
     let n = num_games as f32;
     (
         100.0 * model_wins  / n,

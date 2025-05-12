@@ -34,7 +34,7 @@ pub fn run_env_heuristic<
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display
 >(env: &mut Env, env_name: &str, from_random: bool) {
-    if from_random {
+    if !from_random {
         env.set_against_random();
     };
     let mut stdout = io::stdout();

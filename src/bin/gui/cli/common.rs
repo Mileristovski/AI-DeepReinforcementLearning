@@ -6,7 +6,7 @@ use crossterm::terminal::{Clear, ClearType};
 
 pub fn reset_screen(stdout: &mut Stdout, message: &str) {
     clear_screen();
-    // Clear screen and draw the logo and menu
+    
     execute!(stdout, Clear(ClearType::All)).unwrap();
     println!("----------------------------------------------------------------------");
     println!("{}", message);
