@@ -4,7 +4,7 @@ use crate::gui::cli::common::{reset_screen, user_choice};
 use crate::services::envs::run_envs::{run_env_heuristic, run_benchmark_random_agents, run_tests_all_algorithms, run_tests_model_free_algorithms, run_tests_model_based_algorithms};
 use crate::algorithms::model_free::sarsa::run_episodic_semi_gradient_sarsa;
 use crossterm::terminal::disable_raw_mode;
-use crate::algorithms::model_based::alpha_zero::expert_apprentice::run_alpha_zero_expert_apprentice;
+use crate::algorithms::model_based::alpha_zero::expert_apprentice::expert_apprentice;
 use crate::algorithms::model_based::monte_carlo::monte_carlo_tree_search_uct::run_mcts;
 use crate::algorithms::model_free::ppo::ppo_a2c::run_ppo_a2c;
 use crate::algorithms::model_free::q_learning::deep_q_learning::run_deep_q_learning;
@@ -116,10 +116,7 @@ pub fn submenu_drl<
             "PPO A2C",
             "Monte Carlo Random Rollout",
             "Monte Carlo Tree Search",
-            "AlphaZero Expert Apprentice",
-            "AlphaZero",
-            "MuZero",
-            "MuZero Stochastic",
+            "Expert Apprentice",
             "Back"
         ];
 
@@ -142,7 +139,7 @@ pub fn submenu_drl<
             9 => { run_ppo_a2c::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
             10 => { run_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
             11 => { run_mcts::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
-            12 => { run_alpha_zero_expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
+            12 => { expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
             13 => { break; }
             _ => {}
         }

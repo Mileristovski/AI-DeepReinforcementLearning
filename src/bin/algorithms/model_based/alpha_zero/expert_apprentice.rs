@@ -271,7 +271,7 @@ where
     model
 }
 
-pub fn run_alpha_zero_expert_apprentice<
+pub fn expert_apprentice<
     const NUM_STATE_FEATURES: usize,
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default + Clone,
