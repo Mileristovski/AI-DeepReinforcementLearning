@@ -69,7 +69,7 @@ where
 
             let mask   = env.action_mask();
             let mask_t = Tensor::<B,1>::from(mask).to_device(device);
-            
+
             // Apply softmask with mask
             let dist = masked_softmax::<B, NUM_ACTIONS>(logits, mask_t, device);
             let a = dist.sample(&mut rng);
@@ -105,7 +105,10 @@ where
             let baseline = critic.forward(s_t.clone()).slice([0..1]).detach().into_scalar();
             let advantage = g_t - baseline;
             let logits = policy.forward(s_t);
-            let logp = log_softmax(logits).slice([*action..action + 1]);
+
+            let log_probs = log_softmax(logits.clone());
+            let logp = log_probs.clone().slice([*action .. action + 1]);
+            
             let loss_pol = logp.mul_scalar(-advantage);
             let grad_pol = loss_pol.backward();
             let grads_pol = GradientsParams::from_grads(grad_pol, &policy);
@@ -131,7 +134,7 @@ pub fn run_reinforce_actor_critic<
     let critic = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, 1);
     
     let name = format!("./data/{}/reinforce_lc", env_name);
-    let mut logger = ReinforceLCLogger::new(&name, &params);
+    let mut logger = ReinforceLCLogger::new(&name, env_name.parse().unwrap(), &params);
     let trained_policy = episodic_actor_critic::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,

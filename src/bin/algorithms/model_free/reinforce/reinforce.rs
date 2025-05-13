@@ -3,14 +3,14 @@ use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, test_trained_model};
+use crate::services::algorithms::helpers::{get_device, log_softmax, masked_softmax, test_trained_model};
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use std::time::Instant;
 use kdam::tqdm;
-use rand::distributions::{Distribution, WeightedIndex};
+use rand::distributions::Distribution;
 use rand::SeedableRng;
 use crate::services::algorithms::exports::model_free::reinforce::reinforce::ReinforceLogger;
 
@@ -55,25 +55,16 @@ where
 
         // store (state, mask, action, reward)
         let mut traj: Vec<([f32; N_S], [f32; N_A], usize, f32)> = Vec::new();
-        let mut s = env.state_description();
 
         //------------------ roll-out ------------------------------------
         let game_start = Instant::now();
         while !env.is_game_over() {
+            let s = env.state_description();
             let logits = model.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
 
             let mask   = env.action_mask();
             let mask_t = Tensor::<B,1>::from(mask).to_device(device);
-
-            // masked soft-max
-            let adj = logits.clone() * mask_t.clone()
-                + neg_inf.clone() * (mask_t.clone().neg().add_scalar(1.0));
-            let probs = softmax(adj);
-
-            // safe sampling (skip the step if all probs are ~0)
-            let p_vec = probs.clone().into_data().into_vec::<f32>().unwrap();
-            let dist  = WeightedIndex::new(&p_vec)
-                .unwrap_or_else(|_| WeightedIndex::new(&[1.0; N_A]).unwrap());
+            let dist = masked_softmax::<B, N_A>(logits, mask_t, device);
             let a = dist.sample(&mut rng);
 
             let prev = env.score();
@@ -81,7 +72,6 @@ where
             let r = env.score() - prev;
 
             traj.push((s, mask, a, r));
-            s = env.state_description();
         }
 
         //---------------- Monte-Carlo returns ---------------------------
@@ -126,7 +116,7 @@ pub fn run_reinforce<
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
     
     let name = format!("./data/{}/reinforce", env_name);
-    let mut logger = ReinforceLogger::new(&name, &params);
+    let mut logger = ReinforceLogger::new(&name, env_name.parse().unwrap(), &params);
     let trained = episodic_reinforce::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,

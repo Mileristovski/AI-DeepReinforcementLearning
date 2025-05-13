@@ -185,7 +185,7 @@ pub fn run_double_deep_q_learning_er<
     let fmin_vec = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
     
     let name = format!("./data/{}/ddqler", env_name);
-    let mut logger = DqnErLogger::new(&name, &params, REPLAY_CAPACITY, BATCH_SIZE, TARGET_UPDATE_EVERY);
+    let mut logger = DqnErLogger::new(&name, env_name.parse().unwrap(), &params, REPLAY_CAPACITY, BATCH_SIZE, TARGET_UPDATE_EVERY);
     let trained = episodic_double_deep_q_learning_er::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,

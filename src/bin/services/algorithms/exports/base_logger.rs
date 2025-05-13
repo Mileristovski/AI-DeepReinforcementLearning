@@ -21,11 +21,12 @@ pub struct BaseLogger {
     start_time: Instant,
     pub(crate) last_log_time: Instant,
     run_dir: PathBuf,
+    env_name: String
 }
 
 impl BaseLogger {
     /// Create a new run folder under `base_dir`, open CSV with `metadata.csv`.
-    pub fn new(base_dir: &str) -> Self {
+    pub fn new(base_dir: &str, env_name: String) -> Self {
         let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
         let run_dir = Path::new(base_dir).join(format!("run{timestamp}"));
         create_dir_all(&run_dir).expect("could not create run directory");
@@ -46,7 +47,7 @@ impl BaseLogger {
         }
 
         let now = Instant::now();
-        BaseLogger { writer, start_time: now, last_log_time: now, run_dir }
+        BaseLogger { writer, start_time: now, last_log_time: now, run_dir, env_name }
     }
 
     /// Log base metrics. Returns the run directory for further use.
@@ -63,4 +64,10 @@ impl BaseLogger {
 
     /// Expose run directory path
     pub fn run_dir(&self) -> &PathBuf { &self.run_dir }
+    
+    pub fn run_input_dir(&self) -> PathBuf {
+        let path = format!("/input/{}", self.env_name);
+        let input_path = Path::new(&path).join("evaluation".to_string());
+        input_path
+    }
 }

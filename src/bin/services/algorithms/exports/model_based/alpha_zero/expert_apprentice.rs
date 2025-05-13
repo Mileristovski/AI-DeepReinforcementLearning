@@ -8,7 +8,7 @@ use crate::services::algorithms::exports::base_logger::{BaseLogger, RecordBase};
 
 /// Flat tuple so csv::Writer can serialize it
 #[derive(Serialize)]
-pub struct AlphaZeroExpertCsvRecord(
+pub struct ExpertApprenticeCsvRecord(
     usize,  // iteration
     f32,    // mean_score
     f32,    // mean_duration
@@ -23,7 +23,7 @@ pub struct AlphaZeroExpertCsvRecord(
     f32,    // weight_decay
 );
 
-pub struct AlphaZeroExpertLogger {
+pub struct ExpertApprenticeLogger {
     base: BaseLogger,
     num_iterations: usize,
     episode_stop: usize,
@@ -34,10 +34,10 @@ pub struct AlphaZeroExpertLogger {
     weight_decay: f32,
 }
 
-impl AlphaZeroExpertLogger {
-    pub fn new(base_dir: &str, params: &crate::config::DeepLearningParams) -> Self {
-        let base = BaseLogger::new(base_dir);
-        AlphaZeroExpertLogger {
+impl ExpertApprenticeLogger {
+    pub fn new(base_dir: &str, env_name: String, params: &crate::config::DeepLearningParams) -> Self {
+        let base = BaseLogger::new(base_dir, env_name);
+        ExpertApprenticeLogger {
             base,
             num_iterations:      params.num_episodes,
             episode_stop:        params.episode_stop,
@@ -55,14 +55,14 @@ impl AlphaZeroExpertLogger {
         let run_dir = self.base.run_dir().clone();
 
         println!(
-            "Alpha-Zero-EA Mean Score: {:.3} / Mean Duration {:.3} (ep {} — {:.2?} elapsed)",
+            "Expert-Apprentice Mean Score: {:.3} / Mean Duration {:.3} (ep {} — {:.2?} elapsed)",
             mean_score,
             mean_duration.as_secs_f32(),
             episode,
             std::time::Duration::from_secs_f64(base_metrics.interval_elapsed_secs)
         );
 
-        let rec = AlphaZeroExpertCsvRecord(
+        let rec = ExpertApprenticeCsvRecord(
             base_metrics.episode,
             base_metrics.mean_score,
             base_metrics.mean_duration.as_secs_f32(),
@@ -92,9 +92,15 @@ impl AlphaZeroExpertLogger {
         M: Module<B>,
         B: Backend,
     {
-        let path = self.base.run_dir().join(format!("alpha_zero_expert_model_{iter}.mpk"));
+        let path = self.base.run_dir().join(format!("expert_apprentice_model_{iter}.mpk"));
         let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
         model.clone().save_file(path, &recorder)
             .expect("failed saving AlphaZero-Expert model");
+
+        let input_dir = self.base.run_input_dir();
+        let input_path = input_dir.join(format!("expert_apprentice_model_{iter}.mpk"));
+        let rec  = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
+        model.clone().save_file(input_path, &rec).expect("failed saving model");
+
     }
 }

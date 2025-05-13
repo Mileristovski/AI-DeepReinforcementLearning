@@ -76,10 +76,8 @@ where
 
             traj.push((s, mask_arr, a, r));
         }
-        total_duration += game_start.elapsed();
-        score_sum += env.score();
 
-        // Monte‑Carlo returns ---------------------------------------------
+        //---------------- Monte-Carlo returns ---------------------------
         let mut returns = Vec::with_capacity(traj.len());
         let mut g = 0.0f32;
         for &(_, _, _, r) in traj.iter().rev() {
@@ -89,10 +87,11 @@ where
         returns.reverse();
 
         let baseline = returns.iter().sum::<f32>() / returns.len() as f32;
-
+        
+        //---------------- REINFORCE update ------------------------------
         for ((state, mask_arr, action, _), &g_t) in traj.iter().zip(returns.iter()) {
             let advantage = g_t - baseline;
-            if advantage.abs() < 1e-6 { continue; } // tiny grads – skip
+            if advantage.abs() < 1e-6 { continue; }
 
             let logits = model.forward(Tensor::<B, 1>::from_floats(state.as_slice(), device));
             let mask_t = Tensor::<B, 1>::from(*mask_arr).to_device(device);
@@ -104,6 +103,8 @@ where
             let grads = GradientsParams::from_grads(loss.backward(), &model);
             model = opt.step(lr.into(), model, grads);
         }
+        total_duration += game_start.elapsed();
+        score_sum += env.score();
     }
     logger.save_model(&model, num_episodes);
     println!("Mean Score : {:.3}", score_sum / episode_stop as f32);
@@ -122,7 +123,7 @@ pub fn run_reinforce_baseline<
     let model = MyQmlp::<MyAutodiffBackend>::new(&device, N_S, N_A);
     
     let name = format!("./data/{}/reinforce_mb", env_name);
-    let mut logger = ReinforceBaselineLogger::new(&name, &p);
+    let mut logger = ReinforceBaselineLogger::new(&name, env_name.parse().unwrap(), &p);
     let trained = episodic_reinforce_baseline::<N_S, N_A, _, MyAutodiffBackend, Env>(
         model,
         p.num_episodes,

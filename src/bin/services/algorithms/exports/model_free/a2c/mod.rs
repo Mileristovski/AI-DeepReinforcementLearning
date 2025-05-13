@@ -37,8 +37,8 @@ pub struct A2cLogger {
 }
 
 impl A2cLogger {
-    pub fn new(base_dir: &str, params: &crate::config::DeepLearningParams) -> Self {
-        let base = BaseLogger::new(base_dir);
+    pub fn new(base_dir: &str,env_name: String, params: &crate::config::DeepLearningParams) -> Self {
+        let base = BaseLogger::new(base_dir, env_name);
         A2cLogger {
             base,
             num_episodes: params.num_episodes,
@@ -99,5 +99,10 @@ impl A2cLogger {
         let path = self.base.run_dir().join(format!("a2c_policy_{episode}.mpk"));
         let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
         policy.clone().save_file(path, &recorder).expect("failed saving A2C policy model");
+
+        let input_dir = self.base.run_input_dir();
+        let input_path = input_dir.join(format!("a2c_policy_{episode}.mpk"));
+        let rec  = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
+        policy.clone().save_file(input_path, &rec).expect("failed saving model");
     }
 }

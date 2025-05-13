@@ -35,8 +35,8 @@ pub struct SarsaLogger {
 }
 
 impl SarsaLogger {
-    pub fn new(base_dir: &str, params: &crate::config::DeepLearningParams) -> Self {
-        let base = BaseLogger::new(base_dir);
+    pub fn new(base_dir: &str, env_name: String,  params: &crate::config::DeepLearningParams) -> Self {
+        let base = BaseLogger::new(base_dir, env_name);
         SarsaLogger { base,
             num_episodes: params.num_episodes,
             episode_stop: params.episode_stop,
@@ -95,5 +95,11 @@ impl SarsaLogger {
         let path = self.base.run_dir().join(format!("sarsa_model_{ep}.mpk"));
         let rec  = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
         model.clone().save_file(path, &rec).expect("failed saving model");
+        
+        // Save model for evaluation
+        let input_dir = self.base.run_input_dir();
+        let input_path = input_dir.join(format!("sarsa_model_eval_{ep}.mpk"));
+        let rec  = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
+        model.clone().save_file(input_path, &rec).expect("failed saving model");
     }
 }

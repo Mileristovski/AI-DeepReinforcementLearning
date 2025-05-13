@@ -15,7 +15,7 @@ use crate::services::algorithms::helpers::{get_device, log_softmax, softmax, spl
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use std::fmt::Display;
 use std::time::Instant;
-use crate::services::algorithms::exports::model_based::alpha_zero::alpha_zero_ea::AlphaZeroExpertLogger;
+use crate::services::algorithms::exports::model_based::alpha_zero::expert_apprentice::ExpertApprenticeLogger;
 
 #[allow(dead_code)]
 struct Node<const A: usize> {
@@ -186,7 +186,7 @@ pub fn episodic_alpha_zero_expert_apprentice<
     learning_rate: f32,
     _weight_decay: f32,
     device: &B::Device,
-    logger: &mut AlphaZeroExpertLogger
+    logger: &mut ExpertApprenticeLogger
 ) -> M
 where
     M::InnerModule: Forward<B = B::InnerBackend>,
@@ -282,8 +282,8 @@ pub fn expert_apprentice<
     let model =
         MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS + 1);
 
-    let name = format!("./data/{}/alpha_zero_ea", env_name);
-    let mut logger = AlphaZeroExpertLogger::new(&name, &params);
+    let name = format!("./data/{}/expert_apprentise", env_name);
+    let mut logger = ExpertApprenticeLogger::new(&name, env_name.parse().unwrap(), &params);
     let trained = episodic_alpha_zero_expert_apprentice::<
         NUM_STATE_FEATURES,
         NUM_ACTIONS,

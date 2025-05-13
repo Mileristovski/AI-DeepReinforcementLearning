@@ -137,7 +137,7 @@ pub fn run_double_deep_q_learning<
     let fmin_vec = Tensor::from_floats([f32::MIN; NUM_ACTIONS], &device);
 
     let name = format!("./data/{}/ddql", env_name);
-    let mut logger = DoubleDqnLogger::new(&name, &params);
+    let mut logger = DoubleDqnLogger::new(&name, env_name.parse().unwrap(), &params);
     
     let trained = episodic_double_deep_q_learning::<
         NUM_STATE_FEATURES,

@@ -157,7 +157,7 @@ pub fn run_episodic_semi_gradient_sarsa<
     // let parameters = DeepLearningParams::default();
     
     let name = format!("./data/{}/sarsa", env_name);
-    let mut logger = SarsaLogger::new(&name, &parameters);
+    let mut logger = SarsaLogger::new(&name, env_name.parse().unwrap(), &parameters);
     
     // Train the model
     let model =

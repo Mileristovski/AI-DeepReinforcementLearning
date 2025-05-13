@@ -31,8 +31,8 @@ pub struct ReinforceLCLogger {
 }
 
 impl ReinforceLCLogger {
-    pub fn new(base_dir: &str, params: &crate::config::DeepLearningParams) -> Self {
-        let base = BaseLogger::new(base_dir);
+    pub fn new(base_dir: &str, env_name: String, params: &crate::config::DeepLearningParams) -> Self {
+        let base = BaseLogger::new(base_dir, env_name);
         ReinforceLCLogger {
             base,
             num_episodes: params.num_episodes,
@@ -87,5 +87,11 @@ impl ReinforceLCLogger {
         let path = self.base.run_dir().join(format!("reinforce_ac_model_{episode}.mpk"));
         let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
         model.clone().save_file(path, &recorder).expect("failed saving REINFORCE model");
+
+        let input_dir = self.base.run_input_dir();
+        let input_path = input_dir.join(format!("reinforce_ac_model_{episode}.mpk"));
+        let rec  = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
+        model.clone().save_file(input_path, &rec).expect("failed saving model");
+
     }
 }
