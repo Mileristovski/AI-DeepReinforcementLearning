@@ -32,7 +32,6 @@ pub fn submenu_tests<
             "Test all algorithms",
             "Test model-free algorithms",
             "Test model-based algorithms",
-            "Test model-learned algorithms",
             "Back",
         ];
 
