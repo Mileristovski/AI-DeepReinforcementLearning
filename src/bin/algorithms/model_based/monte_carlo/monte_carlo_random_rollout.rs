@@ -24,7 +24,6 @@ fn mc_q<
         sim.step_from_idx(a);
 
         while !sim.is_game_over() {
-            // unwrap() is safe – we checked `is_game_over`
             let ra = sim.available_actions_ids().choose(rng).unwrap();
             sim.step_from_idx(ra);
         }
