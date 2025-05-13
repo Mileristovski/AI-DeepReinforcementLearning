@@ -86,7 +86,7 @@ fn episodic_random_rollout<
     let mut score_sum = 0.0;
     for ep in tqdm!(0..=episodes) {
         if ep > 0 && ep % log_every == 0 {
-            println!("Mean Score : {:.3}", score_sum / log_every as f32);
+            println!("MCRR - Mean Score : {:.3}", score_sum / log_every as f32);
             score_sum = 0.0;
         }
         env.reset();

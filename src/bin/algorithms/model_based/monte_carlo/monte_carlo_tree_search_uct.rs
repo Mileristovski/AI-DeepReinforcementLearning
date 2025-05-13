@@ -157,7 +157,7 @@ fn episodic_mcts<
 
     for ep in tqdm!(0..=params.num_episodes) {
         if ep > 0 && ep % params.episode_stop == 0 {
-            println!("Mean Score : {:.3}", total / params.episode_stop as f32);
+            println!("MCTS - Mean Score : {:.3}", total / params.episode_stop as f32);
             total = 0.0;
         }
         env.reset();
