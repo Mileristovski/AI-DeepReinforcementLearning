@@ -191,7 +191,10 @@ where
     Env: DeepDiscreteActionsEnv<S, A> + Display + Default + Clone,
     R: Rng + ?Sized,
 {
+    // We create a new tree
     let mut tree = Vec::new();
+    
+    // Add the root node 
     tree.push(Node::new());  // Create root node
 
     for _ in 0..num_sims {
@@ -201,12 +204,17 @@ where
 
         // Selection
         while !env.is_game_over() {
+            // If we have an untried action we expand
             if let Some(action) = tree[node].get_untried_action(&env) {
                 // Expansion
                 env.step_from_idx(action);
                 let new_id = tree.len();
                 tree.push(Node::new());
+                
+                // Add the edge to the parent
                 tree[node].children[action] = Some(Edge { action, child: new_id });
+                
+                // Get new parent
                 node = new_id;
                 path.push(node);
                 break;

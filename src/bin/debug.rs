@@ -171,7 +171,7 @@ fn main() {
     // ── 2. load weights from disk and get the INNER (no-grad) model ─────
     let enemy = load_inference_model::<_, MyAutodiffBackend>(
         template,
-        "./data/reinforce_lc/Bobail/run20250511_223831/reinforce_model_100.mpk",   // point to any existing checkpoint
+        "../../data/reinforce_lc/Bobail/run20250511_223831/reinforce_mode_lal_100.mpk",   // point to any existing checkpoint
         &device,
     );
 
