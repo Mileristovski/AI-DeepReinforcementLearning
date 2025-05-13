@@ -1,14 +1,11 @@
 use std::fmt::Display;
 use std::io;
 use crate::gui::cli::common::{reset_screen, user_choice};
-use crate::services::envs::run_envs::{run_env_heuristic, run_benchmark_random_agents, run_tests_all_algorithms, run_tests_model_free_algorithms, run_tests_model_based_algorithms, run_tests_model_learned_algorithms};
+use crate::services::envs::run_envs::{run_env_heuristic, run_benchmark_random_agents, run_tests_all_algorithms, run_tests_model_free_algorithms, run_tests_model_based_algorithms};
 use crate::algorithms::model_free::sarsa::run_episodic_semi_gradient_sarsa;
 use crossterm::terminal::disable_raw_mode;
-use crate::algorithms::model_based::alpha_zero::alpha_zero::run_alpha_zero;
-use crate::algorithms::model_based::alpha_zero::alpha_zero_expert_apprentice::run_alpha_zero_expert_apprentice;
+use crate::algorithms::model_based::alpha_zero::expert_apprentice::run_alpha_zero_expert_apprentice;
 use crate::algorithms::model_based::monte_carlo::monte_carlo_tree_search_uct::run_mcts;
-use crate::algorithms::model_learned::mu_zero::mu_zero::run_mu_zero;
-use crate::algorithms::model_learned::mu_zero::mu_zero_stochastic::run_muzero_stochastic;
 use crate::algorithms::model_free::ppo::ppo_a2c::run_ppo_a2c;
 use crate::algorithms::model_free::q_learning::deep_q_learning::run_deep_q_learning;
 use crate::algorithms::model_free::q_learning::double_deep_q_learning::run_double_deep_q_learning;
@@ -48,8 +45,7 @@ pub fn submenu_tests<
             0 => run_tests_all_algorithms::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name),
             1 => run_tests_model_free_algorithms::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name),
             2 => run_tests_model_based_algorithms::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name),
-            3 => run_tests_model_learned_algorithms::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name),
-            4 => break,
+            3 => break,
             _ => {}
         }
     }
@@ -147,10 +143,7 @@ pub fn submenu_drl<
             10 => { run_random_rollout::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
             11 => { run_mcts::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
             12 => { run_alpha_zero_expert_apprentice::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
-            13 => { run_alpha_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
-            14 => { run_mu_zero::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
-            15 => { run_muzero_stochastic::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name, &params); },
-            16 => { break; }
+            13 => { break; }
             _ => {}
         }
     }

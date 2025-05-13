@@ -1,2 +1,1 @@
-pub mod alpha_zero;
-pub mod alpha_zero_expert_apprentice;
+pub mod expert_apprentice;

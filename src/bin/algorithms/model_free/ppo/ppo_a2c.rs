@@ -65,13 +65,14 @@ where
             let mask_array = env.action_mask();  // [48] of 0.0 or 1.0
             let mask_t     = Tensor::<B,1>::from_floats(mask_array, &device);
 
-            // 3. masked softmax: illegal → p = 0
             let probs      = masked_softmax(logits.clone(), mask_t.clone());
             let probs_vec  = probs.clone().into_data().into_vec::<f32>().unwrap();
             let dist       = WeightedIndex::new(&probs_vec).unwrap();
             let a          = dist.sample(&mut rng);
 
-            let prev = env.score(); env.step_from_idx(a);
+            let prev = env.score(); 
+            env.step_from_idx(a);
+            
             let r    = env.score() - prev;
             let s2   = env.state_description();
 

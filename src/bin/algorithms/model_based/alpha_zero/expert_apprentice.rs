@@ -209,8 +209,8 @@ where
 
         for _ in 0..games_per_iteration {
             let mut env = Env::default();
-
             let mut trajectory = Vec::new();
+            
             let game_start = Instant::now();
             while !env.is_game_over() {
                 let pi_expert =
