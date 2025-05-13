@@ -74,10 +74,11 @@ where
                 &q_s, &mask_t, minus_one, plus_one, fmin_vec,
                 env.available_actions_ids(), eps, &mut rng);
 
-            let prev = env.score();
+
+            let r_prev = env.score();
             env.step_from_idx(a);
-            let r = env.score() - prev;
-            let s2 = env.state_description();
+            let r     = env.score() - r_prev;
+            let s2    = env.state_description();
 
             let y = if env.is_game_over() {
                 Tensor::<B,1>::from([r]).to_device(device)

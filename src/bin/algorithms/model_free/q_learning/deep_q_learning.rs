@@ -15,98 +15,98 @@ use crate::services::algorithms::exports::model_free::q_learning::deep_q_learnin
 
 /// Vanilla 1-step Deep-Q-Learning (no replay / no DDQN).
 fn episodic_deep_q_learning<
-    const N_S: usize,
-    const N_A: usize,
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
     M,
     B,
     Env,
 >(
-    mut online: M,
+    mut model: M,
     num_episodes: usize,
-    episode_stop : usize,
-    gamma : f32,
-    lr    : f32,
-    eps_start: f32,
-    eps_final: f32,
-    minus_one: &Tensor<B,1>,
-    plus_one : &Tensor<B,1>,
-    fmin_vec : &Tensor<B,1>,
-    _wd: f32,
+    episode_stop: usize,
+    gamma: f32,
+    alpha: f32,
+    start_epsilon: f32,
+    final_epsilon: f32,
+    minus_one: &Tensor<B, 1>,
+    plus_one:  &Tensor<B, 1>,
+    fmin_vec:  &Tensor<B, 1>,
+    _weight_decay: f32,
     device: &B::Device,
-    logger: &mut DqnLogger,
+    logger: &mut DqnLogger
 ) -> M
 where
     B: AutodiffBackend<FloatElem = f32, IntElem = i64>,
     M: Forward<B = B> + AutodiffModule<B> + Clone,
     M::InnerModule: Forward<B = B::InnerBackend>,
-    Env: DeepDiscreteActionsEnv<N_S, N_A> + Display + Default,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default,
 {
-    const TARGET_SYNC_EVERY: usize = 1_000;           // steps
-    let mut step_cnt  = 0usize;
-    let mut target    = online.clone();               // frozen target
-    let mut opt       = AdamConfig::new().init();
+    const TARGET_SYNC_EVERY: usize = 1_000;      // ← sync every 1 000 steps
+    let mut step_count = 0;
+
+    let mut target    = model.clone();           // frozen target net
+    let mut optimizer = AdamConfig::new().init();
     let mut rng       = Xoshiro256PlusPlus::from_entropy();
-    let mut score_sum = 0.0;
+    let mut total     = 0.0;
     let mut total_duration = std::time::Duration::new(0, 0);
 
     for ep in tqdm!(0..num_episodes) {
-        if ep > 0 && ep % episode_stop == 0 {
-            let mean = score_sum / episode_stop as f32;
+        if ep % episode_stop == 0 {
+            let mean = total / episode_stop as f32;
             let mean_duration = total_duration / episode_stop as u32;
             logger.log(ep, mean, mean_duration);
-            score_sum = 0.0;
+            total = 0.0;
         }
-        let frac = ep as f32 / num_episodes as f32;
-        let eps  = (1. - frac) * eps_start + frac * eps_final;
+
+        let eps = (1.0 - ep as f32 / num_episodes as f32) * start_epsilon
+            + (ep as f32 / num_episodes as f32) * final_epsilon;
 
         let mut env = Env::default();
         let mut s = env.state_description();
 
         let game_start = Instant::now();
         while !env.is_game_over() {
-            step_cnt += 1;
+            step_count += 1;
             let s_t = Tensor::<B,1>::from_floats(s.as_slice(), device);
             let mask_t = Tensor::<B,1>::from(env.action_mask()).to_device(device);
-            let q_s = online.forward(s_t.clone());
-            let a = epsilon_greedy_action::<B, N_S, N_A>(
+            let q_s = model.forward(s_t.clone());
+            let a = epsilon_greedy_action::<B, NUM_STATE_FEATURES, NUM_ACTIONS>(
                 &q_s, &mask_t, minus_one, plus_one, fmin_vec,
                 env.available_actions_ids(), eps, &mut rng);
 
 
-            let prev = env.score(); 
+            let r_prev = env.score();
             env.step_from_idx(a);
-            let r    = env.score() - prev;
-            let s2   = env.state_description();
+            let r     = env.score() - r_prev;
+            let s2    = env.state_description();
 
             let y = if env.is_game_over() {
                 Tensor::<B,1>::from([r]).to_device(device)
             } else {
                 let s2_t = Tensor::<B,1>::from_floats(s2.as_slice(), device);
-                let q_next = target
-                    .forward(s2_t)
-                    .detach();
-                let max_q  = q_next.max().into_scalar();
+                let q_next = target.forward(s2_t).detach();
+                let max_q = q_next.max().into_scalar();
                 Tensor::<B,1>::from([r + gamma * max_q]).to_device(device)
             };
 
-            let q_sa = q_s.slice([a..a+1]);
+            let q_sa = q_s.slice([a..a + 1]);
             let loss  = (q_sa - y).powf_scalar(2.0);
-            let grads = GradientsParams::from_grads(loss.backward(), &online);
-            online = opt.step(lr.into(), online, grads);
-            
-            if step_cnt % TARGET_SYNC_EVERY == 0 {
-                target = online.clone();
+            let grads = GradientsParams::from_grads(loss.backward(), &model);
+            model = optimizer.step(alpha.into(), model, grads);
+
+            if step_count % TARGET_SYNC_EVERY == 0 {
+                target = model.clone();
             }
 
             s = s2;
         }
+        total += env.score();
         total_duration += game_start.elapsed();
-        score_sum += env.score();
     }
-    
-    logger.save_model(&online, num_episodes);
-    println!("Mean Score : {:.3}", score_sum / episode_stop as f32);
-    online
+
+    logger.save_model(&model, num_episodes);
+    println!("Mean Score : {:.3}", total / episode_stop as f32);
+    model
 }
 
 
