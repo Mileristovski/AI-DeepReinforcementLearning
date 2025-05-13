@@ -3,7 +3,7 @@ use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algorithms::helpers::{log_softmax, get_device, test_trained_model, masked_softmax};
+use crate::services::algorithms::helpers::{log_softmax, get_device, test_trained_model, masked_softmax, softmax};
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
@@ -25,7 +25,7 @@ fn episodic_a2c<
     log_every    : usize,
     n_step       : usize,
     gamma        : f32,
-    _ent_coef     : f32,
+    ent_coef     : f32,
     lr_pol       : f32,
     lr_val       : f32,
     _wd          : f32,
@@ -63,13 +63,12 @@ where
         }
 
         let mut traj: Vec<([f32; N_S], usize, f32)> = Vec::new();
-        
-        // Get the state
         let mut s = env.state_description();
 
         let game_start = Instant::now();
         while !env.is_game_over() {
-            let logits = policy.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
+            let s_t = Tensor::<B, 1>::from_floats(s.as_slice(), device);
+            let logits = policy.forward(s_t);
 
             let mask   = env.action_mask();
             let mask_t = Tensor::<B,1>::from(mask).to_device(device);
@@ -113,9 +112,9 @@ where
                     
                     let log_probs = log_softmax(logits_p.clone());
                     let logp = log_probs.clone().slice([*action .. action + 1]);
-                    // let entropy = - (softmax(logits_p.clone()) * log_probs).sum();
+                    let entropy = - (softmax(logits_p.clone()) * log_probs).sum();
                     
-                    let loss_p = logp.mul_scalar(-advantage); // - entropy.mul_scalar(ent_coef);
+                    let loss_p = logp.mul_scalar(-advantage) - entropy.mul_scalar(ent_coef);
                     let grad_p = loss_p.backward();
                     let grads_p = GradientsParams::from_grads(grad_p, &policy);
                     policy = opt_pol.step(lr_pol.into(), policy, grads_p);

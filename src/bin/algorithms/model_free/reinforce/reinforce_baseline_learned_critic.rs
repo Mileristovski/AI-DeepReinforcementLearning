@@ -3,7 +3,7 @@ use burn::optim::{Optimizer, GradientsParams, AdamConfig};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use crate::services::algorithms::helpers::{get_device, log_softmax, masked_softmax, test_trained_model};
+use crate::services::algorithms::helpers::{get_device, log_softmax, masked_softmax, softmax, test_trained_model};
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 use crate::environments::env::DeepDiscreteActionsEnv;
@@ -27,6 +27,7 @@ pub fn episodic_actor_critic<
     num_episodes: usize,
     episode_stop: usize,
     gamma: f32,
+    ent_coef: f32,
     policy_lr: f32,
     critic_lr: f32,
     _weight_decay: f32,
@@ -44,6 +45,7 @@ where
         // .with_weight_decay(Some(WeightDecayConfig::new(weight_decay)))
         .init();
 
+    let mut env = Env::default();
     let mut rng = Xoshiro256PlusPlus::from_entropy();
     let mut total = 0.0;
     let mut total_duration = std::time::Duration::new(0, 0);
@@ -57,7 +59,6 @@ where
         }
 
         // collect one episode
-        let mut env = Env::default();
         let mut trajectory: Vec<([f32; NUM_STATE_FEATURES], usize, f32)> = Vec::new();
         let mut s = env.state_description();
         
@@ -76,10 +77,12 @@ where
 
             let prev = env.score();
             env.step_from_idx(a);
+            
             let r = env.score() - prev;
-            s = env.state_description();
+            let s2   = env.state_description();
 
             trajectory.push((s, a, r));
+            s   = s2;
         }
         total_duration += game_start.elapsed();
         total += env.score();
@@ -108,12 +111,14 @@ where
 
             let log_probs = log_softmax(logits.clone());
             let logp = log_probs.clone().slice([*action .. action + 1]);
+            let entropy = - (softmax(logits.clone()) * log_probs).sum();
             
-            let loss_pol = logp.mul_scalar(-advantage);
+            let loss_pol = logp.mul_scalar(-advantage) - entropy.mul_scalar(ent_coef);;
             let grad_pol = loss_pol.backward();
             let grads_pol = GradientsParams::from_grads(grad_pol, &policy);
             policy = opt_pol.step(policy_lr.into(), policy, grads_pol);
         }
+        env.reset();
     }
 
     logger.save_model(&policy, num_episodes);
@@ -148,6 +153,7 @@ pub fn run_reinforce_actor_critic<
         params.num_episodes,
         params.episode_stop,
         params.gamma,
+        params.ac_entropy_coef,
         params.alpha,      // policy lr
         params.alpha * 2., // critic lr (for example)
         params.opt_weight_decay_penalty,

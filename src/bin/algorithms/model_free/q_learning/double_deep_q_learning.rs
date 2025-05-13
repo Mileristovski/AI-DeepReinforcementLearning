@@ -57,36 +57,29 @@ where
             logger.log(ep, mean, mean_duration);
             total = 0.0;
         }
-        let frac = ep as f32 / num_episodes as f32;
-        let eps  = (1.0 - frac) * start_epsilon + frac * final_epsilon;
-
+        
+        let eps = (1.0 - ep as f32 / num_episodes as f32) * start_epsilon
+            + (ep as f32 / num_episodes as f32) * final_epsilon;
+        
         let mut env = Env::default();
         let mut s = env.state_description();
 
         let game_start = Instant::now();
         while !env.is_game_over() {
             step_count += 1;
+            let s_t = Tensor::<B,1>::from_floats(s.as_slice(), device);
+            let mask_t = Tensor::<B,1>::from(env.action_mask()).to_device(device);
+            let q_s = model.forward(s_t.clone());
+            let a = epsilon_greedy_action::<B, NUM_STATE_FEATURES, NUM_ACTIONS>(
+                &q_s, &mask_t, minus_one, plus_one, fmin_vec,
+                env.available_actions_ids(), eps, &mut rng);
 
-            // ── 1) ε-greedy action from online net ─────────────────────
-            let q_s = model.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
-            let a   = epsilon_greedy_action::<B, NUM_STATE_FEATURES, NUM_ACTIONS>(
-                &q_s,
-                &Tensor::from(env.action_mask()).to_device(device),
-                minus_one, plus_one, fmin_vec,
-                env.available_actions_ids(),
-                eps,
-                &mut rng,
-            );
-
-            // ── 2) env step ────────────────────────────────────────────
-            let r_prev = env.score();
+            let prev = env.score();
             env.step_from_idx(a);
-            let r     = env.score() - r_prev;
-            let done  = env.is_game_over();
-            let s2    = env.state_description();
+            let r = env.score() - prev;
+            let s2 = env.state_description();
 
-            // ── 3) target y  (Double-DQN) ─────────────────────────────
-            let y = if done {
+            let y = if env.is_game_over() {
                 Tensor::<B,1>::from([r]).to_device(device)
             } else {
                 let s2_t = Tensor::<B,1>::from_floats(s2.as_slice(), device);
@@ -94,19 +87,15 @@ where
                 let q_eval = target
                     .forward(s2_t)
                     .slice([a_max..a_max + 1])
-                    .detach();                // ← detach from autograd
+                    .detach();                
                 q_eval.mul_scalar(gamma).add_scalar(r)
             };
 
-            // ── 4) Q(s,a) from online net ──────────────────────────────
             let q_sa = q_s.slice([a..a + 1]);
-
-            // ── 5) TD-loss and optimiser step ─────────────────────────
             let loss  = (q_sa - y).powf_scalar(2.0);
             let grads = GradientsParams::from_grads(loss.backward(), &model);
             model = optimizer.step(alpha.into(), model, grads);
 
-            // ── 6) periodic target-net sync ───────────────────────────
             if step_count % TARGET_SYNC_EVERY == 0 {
                 target = model.clone();
             }

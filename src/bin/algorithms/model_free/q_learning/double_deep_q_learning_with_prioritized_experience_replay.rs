@@ -91,7 +91,7 @@ where
              logger.log(ep, mean, mean_duration);
              score_sum = 0.0;
         }
-        // linear ε-decay
+        
         let eps = eps_start * (1.0 - ep as f32 / num_episodes as f32)
             + eps_final * (ep as f32 / num_episodes as f32);
 
@@ -101,13 +101,12 @@ where
         let game_start = Instant::now();
         while !env.is_game_over() {
             // ────────── action ──────────
-            let q_s = model.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
+            let s_t = Tensor::<B,1>::from_floats(s.as_slice(), device);
+            let mask_t = Tensor::<B,1>::from(env.action_mask()).to_device(device);
+            let q_s = model.forward(s_t.clone());
             let a = epsilon_greedy_action::<B, N_S, N_A>(
-                &q_s,
-                &Tensor::from(env.action_mask()).to_device(device),
-                minus_one, plus_one, fmin_vec,
-                env.available_actions_ids(),
-                eps, &mut rng);
+                &q_s, &mask_t, minus_one, plus_one, fmin_vec,
+                env.available_actions_ids(), eps, &mut rng);
 
             let prev = env.score();
             env.step_from_idx(a);
@@ -134,7 +133,7 @@ where
                 let is_w: Vec<f32> = idx.iter()
                     .map(|&i| (probs[i] / max_p).powf(-beta))
                     .collect();
-
+      
                 // (3) tensor buffers
                 let mut s_buf  = [[0.0; N_S]; BATCH];
                 let mut s2_buf = [[0.0; N_S]; BATCH];
@@ -162,7 +161,6 @@ where
                     .squeeze::<1>(1);                                   // [B]
                 let done_mask = Tensor::<B,1>::from_floats(d_buf, device);
                 let q_next = q_next * (done_mask.mul_scalar(-1.0).add_scalar(1.0));
-
                 let target_vec = Tensor::<B,1>::from_floats(r_buf, device)
                     + q_next * gamma;
 
@@ -176,6 +174,7 @@ where
                 let q_sa = q_online
                     .gather(1, ind)
                     .squeeze::<1>(1);
+                
                 let td = target_vec.clone() - q_sa;
                 let w_t = Tensor::<B,1>::from_floats(is_w.as_slice(), device);
                 let loss = (td.clone() * w_t).powf_scalar(2.0).mean();

@@ -128,15 +128,15 @@ where
                 let s2_t = Tensor::<B,2>::from_data(s2_buf, device);
 
                 // ── compute Double-DQN target -----------------------------------------
-                let q_next_online  = model .forward(s2_t.clone());   
-                let best_a         = q_next_online.argmax(1);        
-                let q_next_target  = target.forward(s2_t);           
+                let q_next_online  = model .forward(s2_t.clone());
+                let best_a         = q_next_online.argmax(1);
+                let q_next_target  = target.forward(s2_t);
                 let q_next         = q_next_target
                     .gather(1, best_a.clone())
                     .squeeze::<1>(1);                                     // [B]
                 let done_mask      = Tensor::<B,1>::from_floats(d_buf, device);
                 let target_vec     = Tensor::<B,1>::from_floats(r_buf, device)
-                    + q_next * (done_mask.mul_scalar(-1.0).add_scalar(1.0)) * gamma; 
+                    + q_next * (done_mask.mul_scalar(-1.0).add_scalar(1.0)) * gamma;
 
                 // ── current Q(s,a) -----------------------------------------------------
                 let q_online = model.forward(s_t);
@@ -145,7 +145,7 @@ where
                     ind_buf[j][0] = a_buf[j] as i64;
                 }
                 let ind = Tensor::<B, 2, Int>::from_data(ind_buf, device);
-                let q_sa = q_online.gather(1, ind).squeeze::<1>(1);       
+                let q_sa = q_online.gather(1, ind).squeeze::<1>(1);
 
                 // ── loss, backward, optimise ------------------------------------------
                 let td   = target_vec.clone() - q_sa;                     // [B]

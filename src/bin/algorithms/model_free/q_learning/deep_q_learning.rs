@@ -65,29 +65,26 @@ where
         let game_start = Instant::now();
         while !env.is_game_over() {
             step_cnt += 1;
-            
-            let q_s = online.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
-            let a   = epsilon_greedy_action::<B, N_S, N_A>(
-                &q_s,
-                &Tensor::from(env.action_mask()).to_device(device),
-                minus_one, plus_one, fmin_vec,
-                env.available_actions_ids(),
-                eps, &mut rng);
+            let s_t = Tensor::<B,1>::from_floats(s.as_slice(), device);
+            let mask_t = Tensor::<B,1>::from(env.action_mask()).to_device(device);
+            let q_s = online.forward(s_t.clone());
+            let a = epsilon_greedy_action::<B, N_S, N_A>(
+                &q_s, &mask_t, minus_one, plus_one, fmin_vec,
+                env.available_actions_ids(), eps, &mut rng);
+
 
             let prev = env.score(); 
             env.step_from_idx(a);
-            
             let r    = env.score() - prev;
-            let done = env.is_game_over();
-            
             let s2   = env.state_description();
 
-            let y = if done {
+            let y = if env.is_game_over() {
                 Tensor::<B,1>::from([r]).to_device(device)
             } else {
+                let s2_t = Tensor::<B,1>::from_floats(s2.as_slice(), device);
                 let q_next = target
-                    .forward(Tensor::<B,1>::from_floats(s2.as_slice(), device))
-                    .detach();                         // ← no grad
+                    .forward(s2_t)
+                    .detach();
                 let max_q  = q_next.max().into_scalar();
                 Tensor::<B,1>::from([r + gamma * max_q]).to_device(device)
             };
