@@ -74,9 +74,12 @@ where
                 env.available_actions_ids(),
                 eps, &mut rng);
 
-            let prev = env.score(); env.step_from_idx(a);
+            let prev = env.score(); 
+            env.step_from_idx(a);
+            
             let r    = env.score() - prev;
             let done = env.is_game_over();
+            
             let s2   = env.state_description();
 
             let y = if done {

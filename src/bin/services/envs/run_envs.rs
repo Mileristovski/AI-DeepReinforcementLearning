@@ -21,7 +21,7 @@ use crate::algorithms::model_free::ppo::ppo_a2c::run_ppo_a2c;
 // model-based
 use crate::algorithms::model_based::monte_carlo::monte_carlo_random_rollout::run_random_rollout;
 use crate::algorithms::model_based::monte_carlo::monte_carlo_tree_search_uct::run_mcts;
-use crate::algorithms::model_based::alpha_zero::expert_apprentice::expert_apprentice;
+use crate::algorithms::model_based::expert_apprentice::expert_apprentice::expert_apprentice;
 
 use crate::config::DeepLearningParams;
 

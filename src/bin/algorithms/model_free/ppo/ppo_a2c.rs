@@ -10,7 +10,7 @@ use crate::environments::env::DeepDiscreteActionsEnv;
 use std::fmt::Display;
 use std::time::Instant;
 use kdam::tqdm;
-use rand::distributions::{Distribution, WeightedIndex};
+use rand::distributions::Distribution;
 use rand::SeedableRng;
 use crate::services::algorithms::exports::model_free::a2c::A2cLogger;
 
@@ -40,15 +40,21 @@ where
     V::InnerModule : Forward<B = B::InnerBackend>,
     Env : DeepDiscreteActionsEnv<N_S, N_A> + Display + Default,
 {
+    // Initialize
+    // Initialize the 2 optimisers
     let mut opt_pol = AdamConfig::new().init();
     let mut opt_val = AdamConfig::new().init();
+    
+    // Initialize the rest
     let mut rng     = Xoshiro256PlusPlus::from_entropy();
-
     let mut score_sum = 0.0;
     let mut total_duration = std::time::Duration::new(0, 0);
+    
+    // Initialize the env
     let mut env       = Env::default(); 
 
     for ep in tqdm!(0..num_episodes) {
+        // Logging
         if ep % log_every == 0 {
             let mean = score_sum / log_every as f32;
             let mean_duration = total_duration / log_every as u32;
@@ -57,19 +63,22 @@ where
         }
 
         let mut traj: Vec<([f32; N_S], usize, f32)> = Vec::new();
+        
+        // Get the state
         let mut s = env.state_description();
 
         let game_start = Instant::now();
         while !env.is_game_over() {
             let logits = policy.forward(Tensor::<B,1>::from_floats(s.as_slice(), device));
-            let mask_array = env.action_mask();  // [48] of 0.0 or 1.0
-            let mask_t     = Tensor::<B,1>::from_floats(mask_array, &device);
 
-            let probs      = masked_softmax(logits.clone(), mask_t.clone());
-            let probs_vec  = probs.clone().into_data().into_vec::<f32>().unwrap();
-            let dist       = WeightedIndex::new(&probs_vec).unwrap();
-            let a          = dist.sample(&mut rng);
+            let mask   = env.action_mask();
+            let mask_t = Tensor::<B,1>::from(mask).to_device(device);
 
+            // Apply softmax
+            let dist = masked_softmax::<B, N_A>(logits, mask_t, device);
+            let a = dist.sample(&mut rng);
+
+            // Save the score
             let prev = env.score(); 
             env.step_from_idx(a);
             
@@ -80,7 +89,6 @@ where
             s = s2;
 
             if traj.len() >= n_step || env.is_game_over() {
-                // bootstrap value for last state
                 let mut r = if env.is_game_over() {
                     0.0
                 } else {
@@ -95,8 +103,7 @@ where
                     let s_t = Tensor::<B,1>::from_floats(state.as_slice(), device);
 
                     let v_pred = critic.forward(s_t.clone()).slice([0..1]);
-                    let loss_v = (v_pred.clone() - Tensor::from([r]).to_device(device))
-                        .powf_scalar(2.0);
+                    let loss_v = (v_pred.clone() - Tensor::from([r]).to_device(device)).powf_scalar(2.0);
                     let grad_v = loss_v.backward();
                     let grads_v = GradientsParams::from_grads(grad_v, &critic);
                     critic = opt_val.step(lr_val.into(), critic, grads_v);

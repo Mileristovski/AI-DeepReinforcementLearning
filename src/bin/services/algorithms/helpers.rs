@@ -13,7 +13,7 @@ use crate::services::algorithms::model::{Forward, MyQmlp};
 use burn::tensor::backend::AutodiffBackend;
 use burn::tensor::Tensor;
 use burn::module::Module;
-
+use rand::distributions::WeightedIndex;
 
 pub fn softmax<B: AutodiffBackend>(logits: Tensor<B, 1>) -> Tensor<B, 1> {
     let max_val = logits.clone().max();
@@ -23,16 +23,21 @@ pub fn softmax<B: AutodiffBackend>(logits: Tensor<B, 1>) -> Tensor<B, 1> {
     exp.div(sum)
 }
 
-pub fn masked_softmax<B: AutodiffBackend>(
+pub fn masked_softmax<B: AutodiffBackend, const N_A: usize>(
     logits: Tensor<B, 1>,
     mask:   Tensor<B, 1>,
-) -> Tensor<B, 1> {
-    let max_val = (logits.clone() * mask.clone()).max();
-    let shifted = logits - max_val.clone();
-    let exp_all = shifted.exp();
-    let exp_masked = exp_all * mask.clone();
-    let sum = exp_masked.clone().sum();
-    exp_masked.div(sum)
+    device       : &B::Device
+) -> WeightedIndex<f32> {
+    let neg_inf = Tensor::<B,1>::from_floats([-1e9; N_A], device);
+    
+    let adj = logits.clone() * mask.clone()
+        + neg_inf.clone() * (mask.clone().neg().add_scalar(1.0));
+    let probs = softmax(adj);
+
+    let p_vec = probs.clone().into_data().into_vec::<f32>().unwrap();
+    let dist  = WeightedIndex::new(&p_vec)
+        .unwrap_or_else(|_| WeightedIndex::new(&[1.0; N_A]).unwrap());
+    dist
 }
 
 pub fn masked_log_softmax<B: AutodiffBackend>(
@@ -53,6 +58,10 @@ pub fn log_softmax<B: AutodiffBackend, const D: usize>(
     let sum_exp = exp.clone().sum_dim(D - 1);
     let lse = sum_exp.log() + max_val;
     logits - lse
+}
+
+fn safe_sampling() {
+    
 }
 
 

@@ -3,7 +3,7 @@ use burn::optim::{AdamConfig, GradientsParams, Optimizer};
 use burn::prelude::*;
 use burn::tensor::backend::AutodiffBackend;
 use kdam::tqdm;
-use rand::distributions::{Distribution, WeightedIndex};
+use rand::distributions::Distribution;
 use rand::prelude::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use std::fmt::Display;
@@ -11,7 +11,7 @@ use std::time::Instant;
 use crate::config::{DeepLearningParams, MyAutodiffBackend, MyDevice};
 use crate::environments::env::DeepDiscreteActionsEnv;
 use crate::services::algorithms::exports::model_free::reinforce::reinforce_mean_baseline::ReinforceBaselineLogger;
-use crate::services::algorithms::helpers::{get_device, masked_log_softmax, softmax, test_trained_model};
+use crate::services::algorithms::helpers::{get_device, masked_log_softmax, masked_softmax, test_trained_model};
 use crate::services::algorithms::model::{Forward, MyQmlp};
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -43,7 +43,6 @@ where
     let mut rng   = Xoshiro256PlusPlus::from_entropy();
     let mut score_sum = 0.0f32;
     let mut total_duration = std::time::Duration::new(0, 0);
-    let neg_inf = Tensor::<B,1>::from_floats([-1e9; N_A], device);
 
     // each episode ---------------------------------------------------------
     for ep in tqdm!(0..num_episodes) {
@@ -68,16 +67,7 @@ where
 
             let mask   = env.action_mask();
             let mask_t = Tensor::<B,1>::from(mask).to_device(device);
-
-            // masked soft-max
-            let adj = logits.clone() * mask_t.clone()
-                + neg_inf.clone() * (mask_t.clone().neg().add_scalar(1.0));
-            let probs = softmax(adj);
-
-            // safe sampling (skip the step if all probs are ~0)
-            let p_vec = probs.clone().into_data().into_vec::<f32>().unwrap();
-            let dist  = WeightedIndex::new(&p_vec)
-                .unwrap_or_else(|_| WeightedIndex::new(&[1.0; N_A]).unwrap());
+            let dist = masked_softmax::<B, N_A>(logits, mask_t, device);
             let a        = dist.sample(&mut rng);
 
             let prev_score = env.score();
@@ -100,7 +90,6 @@ where
 
         let baseline = returns.iter().sum::<f32>() / returns.len() as f32;
 
-        // one gradient step per time‑step (could be batched) --------------
         for ((state, mask_arr, action, _), &g_t) in traj.iter().zip(returns.iter()) {
             let advantage = g_t - baseline;
             if advantage.abs() < 1e-6 { continue; } // tiny grads – skip
