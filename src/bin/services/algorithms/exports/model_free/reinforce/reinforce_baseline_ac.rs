@@ -49,7 +49,7 @@ impl ReinforceLCLogger {
         let run_dir = self.base.run_dir().clone();
 
         println!(
-            "REINFORCE-BASE-LC Mean Score: {:.3} / Mean Duration {:.3} (ep {} — {:.2?} elapsed)",
+            "REINFORCE-BASE-AC Mean Score: {:.3} / Mean Duration {:.3} (ep {} — {:.2?} elapsed)",
             mean_score,
             mean_duration.as_secs_f32(),
             episode,
