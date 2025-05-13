@@ -61,7 +61,7 @@ where
         // collect one episode
         let mut trajectory: Vec<([f32; NUM_STATE_FEATURES], usize, f32)> = Vec::new();
         let mut s = env.state_description();
-        
+
         let game_start = Instant::now();
         while !env.is_game_over() {
             // policy forward
@@ -77,7 +77,7 @@ where
 
             let prev = env.score();
             env.step_from_idx(a);
-            
+
             let r = env.score() - prev;
             let s2   = env.state_description();
 
@@ -112,8 +112,8 @@ where
             let log_probs = log_softmax(logits.clone());
             let logp = log_probs.clone().slice([*action .. action + 1]);
             let entropy = - (softmax(logits.clone()) * log_probs).sum();
-            
-            let loss_pol = logp.mul_scalar(-advantage) - entropy.mul_scalar(ent_coef);;
+
+            let loss_pol = logp.mul_scalar(-advantage) - entropy.mul_scalar(ent_coef);
             let grad_pol = loss_pol.backward();
             let grads_pol = GradientsParams::from_grads(grad_pol, &policy);
             policy = opt_pol.step(policy_lr.into(), policy, grads_pol);

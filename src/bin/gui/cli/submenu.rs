@@ -18,6 +18,7 @@ use crate::algorithms::model_free::reinforce::reinforce_baseline_learned_critic:
 use crate::algorithms::model_free::reinforce::reinforce_mean_baseline::run_reinforce_baseline;
 use crate::config::DeepLearningParams;
 use crate::environments::env::DeepDiscreteActionsEnv;
+use crate::services::models::helpers::play_vs_human;
 use crate::services::models::runs::{run_compare_models, run_model_vs_random};
 
 pub fn submenu_tests<
@@ -72,6 +73,7 @@ pub fn submenu<
             "Group tests",
             "Test existing models vs each other",
             "Test existing models vs random",
+            "Play vs a model",
             "Back",
         ];
 
@@ -88,7 +90,8 @@ pub fn submenu<
             4 => submenu_tests::<NUM_STATE_FEATURES, NUM_ACTIONS, NUM_STATES, Env>(env_name),
             5 => run_compare_models::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name),
             6 => run_model_vs_random::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(env_name),
-            7 => break,
+            7 => play_vs_human::<NUM_STATE_FEATURES, NUM_ACTIONS, Env>(),
+            8 => break,
             _ => {}
         }
     }

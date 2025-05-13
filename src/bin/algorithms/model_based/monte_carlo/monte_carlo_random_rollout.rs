@@ -3,7 +3,8 @@ use rand::prelude::*;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use std::fmt::Display;
 use std::io;
-
+use std::time::Instant;
+use crate::algorithms::model_based::monte_carlo::monte_carlo_tree_search_uct::mcts_search;
 use crate::config::DeepLearningParams;
 use crate::environments::env::DeepDiscreteActionsEnv;
 
@@ -99,23 +100,30 @@ fn test_random_rollout<
     const N_A: usize,
     Env: DeepDiscreteActionsEnv<N_S, N_A> + Clone + Default + Display,
 >(
-    rollouts_per_action: usize,
+    params: &DeepLearningParams,
     rng: &mut Xoshiro256PlusPlus,
 ) {
-    loop {
         let mut env = Env::default();
+        let mut total = 0.0;
+        let game_start = Instant::now();
 
-        println!("\n--- Test Episode ---\n");
-        let score = run_episode(&mut env, rollouts_per_action, rng);
-        println!("\nFinal state:\n{}\nScore: {}", env, score);
+        for _ in 0..params.num_episodes {
+            env.reset();
+            while !env.is_game_over() {
+                let action = mcts_search(&env, params.mcts_simulations, params.mcts_c, rng);
+                env.step_from_idx(action);
+            }
+            total += env.score();
 
-        println!("Press <Enter> for another test or type 'quit'.");
-        let mut buf = String::new();
-        io::stdin().read_line(&mut buf).unwrap();
-        if buf.trim().eq_ignore_ascii_case("quit") {
-            break;
         }
-    }
+
+        let mean_total = total / params.num_episodes as f32;
+        let mean_duration = game_start.elapsed().as_secs_f64() / params.num_episodes as f64;
+
+        println!("MCRR - Mean Score : {:.3}, Mean Duration : {:.3}s", mean_total * 100.0, mean_duration);
+        let mut buf = String::new();
+        println!("Press Enter to continue...");
+        io::stdin().read_line(&mut buf).unwrap();
 }
 
 pub fn run_random_rollout<
@@ -132,6 +140,6 @@ pub fn run_random_rollout<
         &mut rng,
     );
     if p.run_test {
-        test_random_rollout::<N_S, N_A, Env>(p.mcts_rollouts_per_action, &mut rng);
+        test_random_rollout::<N_S, N_A, Env>(p, &mut rng);
     }
 }

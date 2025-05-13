@@ -6,9 +6,6 @@ use std::thread::sleep;
 use std::time::Duration;
 use std::time::Instant;
 use rand::prelude::IteratorRandom;
-// model-free
-use crate::algorithms::model_free::sarsa::run_episodic_semi_gradient_sarsa;
-// use crate::algorithms::model_free::q_learning::tabular_q_learning::run_tabular_q_learning;
 use crate::algorithms::model_free::q_learning::deep_q_learning::run_deep_q_learning;
 use crate::algorithms::model_free::q_learning::double_deep_q_learning::run_double_deep_q_learning;
 use crate::algorithms::model_free::q_learning::double_deep_q_learning_with_experience_replay::run_double_deep_q_learning_er;

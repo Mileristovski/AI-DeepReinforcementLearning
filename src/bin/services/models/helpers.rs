@@ -1,5 +1,6 @@
 use std::fmt::Display;
-use std::io;
+use std::{fs, io};
+use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use burn::prelude::Tensor;
@@ -262,4 +263,98 @@ where
         mean_duration.as_secs_f64(),
         (total_steps as f32) / (num_games as f32)
     )
+}
+
+pub fn play_vs_human<
+    const NUM_STATE_FEATURES: usize,
+    const NUM_ACTIONS: usize,
+    Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS>
+    + Display
+    + Default
+    + Clone,
+>()
+where
+    MyQmlp<MyAutodiffBackend>: Forward<B = MyAutodiffBackend>,
+{
+    // 0) pick up the device
+    let device: MyDevice = get_device();
+
+    // 1) find the one .mpk model under ./play/<env_name>/
+    let play_dir = PathBuf::from("./play");
+    if !play_dir.is_dir() {
+        println!("No folder {:?} – nothing to play.", play_dir);
+        return;
+    }
+    let model_path = fs::read_dir(&play_dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| p.extension().map(|ext| ext == "mpk").unwrap_or(false))
+        .expect("No .mpk file found in play directory");
+
+    println!("Loading model from {:?}", model_path);
+    let template = MyQmlp::<MyAutodiffBackend>::new(&device, NUM_STATE_FEATURES, NUM_ACTIONS);
+    let model = load_inference_model::<_, MyAutodiffBackend>(template, model_path, &device);
+
+    // 2) set up environment
+    let mut env = Env::default();
+
+    println!("\nStarting game against model. Enter action as the index from the available list.\n");
+    
+    let fmin_vec = Tensor::<MyBackend, 1>::from_floats([f32::MIN; NUM_ACTIONS], &device);
+    let mut current_player = 0;
+    let mut bobail: bool = true;           
+    
+    while !env.is_game_over() {
+        println!("{}", env);
+        
+        if current_player == 0 {
+            // ——— human’s turn ———
+            let mut input = String::new();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+
+            let input = input.trim();
+            if input.eq_ignore_ascii_case("quit") {
+                println!("Exiting...");
+                env.reset();
+                break;
+            }
+            match input.parse::<usize>() {
+                Ok(action) => {
+                    if env.available_actions().collect::<Vec<_>>().contains(&action) {
+                        env.step(action);
+                    } else {
+                        println!("Please enter a valid action");
+                        let mut s = String::new();
+                        io::stdin().read_line(&mut s).unwrap();
+                    }
+                }
+                Err(_) => {
+                    println!("Please enter a valid number or 'quit' to exit.");
+                    sleep(Duration::from_secs(1));
+                }
+            }
+        } else {
+            let mask = env.action_mask();
+            let s_tensor = Tensor::<MyBackend, 1>::from_floats(
+                env.state_description().as_slice(),
+                &device,
+            );
+            let mask_t = Tensor::<MyBackend, 1>::from(mask).to_device(&device);
+
+            let logits   = model.forward(s_tensor);
+            let logits   = logits.slice([0..NUM_ACTIONS]);
+            let action   = greedy_policy_action::<MyBackend>(&logits,
+                                                             &mask_t,
+                                                             &fmin_vec);
+            env.switch_board();
+            env.step_from_idx(action);
+        }
+        
+        if !bobail {
+            current_player = if current_player == 1 { 0 } else  { 1 };
+        } 
+        bobail = !bobail;
+    }
 }

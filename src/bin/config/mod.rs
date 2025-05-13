@@ -89,7 +89,7 @@ impl Default for DeepLearningParams {
             test_models_nb_games: 1000,
             num_tries:500,
             run_test: true,
-            num_episodes: 1000,
+            num_episodes: 10000,
             episode_stop: 100,
             start_epsilon: 1.0,
             final_epsilon: 1e-5,

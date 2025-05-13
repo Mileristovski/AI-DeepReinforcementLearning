@@ -1,5 +1,6 @@
 use std::{fs::{self, OpenOptions}, io, io::{BufWriter, Write}, path::{Path, PathBuf}};
 use std::fmt::Display;
+use burn::module::Module;
 use crate::config::{DeepLearningParams, MyBackend};
 use crate::services::algorithms::model::{MyQmlp, Forward};
 use crate::environments::env::DeepDiscreteActionsEnv;
@@ -157,7 +158,7 @@ pub fn run_model_vs_random<
     const NUM_ACTIONS: usize,
     Env: DeepDiscreteActionsEnv<NUM_STATE_FEATURES, NUM_ACTIONS> + Display + Default + Clone,
 >(
-    env_name: &str,       
+    env_name: &str,
 ) where
     MyQmlp<MyBackend>: Forward<B = MyBackend>,
 {
@@ -208,3 +209,4 @@ pub fn run_model_vs_random<
 
     end_of_run();
 }
+

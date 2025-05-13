@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::io;
+use std::time::Instant;
 use kdam::tqdm;
 use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
@@ -181,24 +182,28 @@ fn test_mcts<
     [(); S]:,
     [(); A]:,
 {
-    loop {
-        let mut env = Env::default();
+    let mut env = Env::default();
+    env.reset();
+    let mut total = 0.0;
+    let game_start = Instant::now();
+    
+    for _ in 0..params.num_episodes {
         env.reset();
-
-        println!("\n--- Test Episode ---\n");
         while !env.is_game_over() {
             let action = mcts_search(&env, params.mcts_simulations, params.mcts_c, rng);
             env.step_from_idx(action);
         }
-        let score = env.score();
-        println!("\nFinal state:\n{}\nScore: {}", env, score);
-        println!("Press Enter to run another test, or type 'quit' to return.");
-        let mut buf = String::new();
-        io::stdin().read_line(&mut buf).unwrap();
-        if buf.trim().eq_ignore_ascii_case("quit") {
-            break;
-        }
+        total += env.score();
+        
     }
+    
+    let mean_total = total / params.num_episodes as f32;
+    let mean_duration = game_start.elapsed().as_secs_f64() / params.num_episodes as f64;
+
+    println!("MCTS - Mean Score : {:.3}, Mean Duration : {:.3}s", mean_total, mean_duration);
+    let mut buf = String::new();
+    println!("Press Enter to continue...");
+    io::stdin().read_line(&mut buf).unwrap();
 }
 
 pub fn run_mcts<
